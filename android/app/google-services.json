@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "159656243067",
+    "project_id": "ortak-hesap-app-cd595",
+    "storage_bucket": "ortak-hesap-app-cd595.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159656243067:android:f5f3d69175667b55e9d7de",
+        "android_client_info": {
+          "package_name": "com.example.ortak_hesap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDh9NhuOMZyVMXsLdLmRy7BAUfP304ZpCU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

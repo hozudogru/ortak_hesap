@@ -1,0 +1,40 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "ortak-hesap-app-cd595",
+          "appId": "1:159656243067:android:f5f3d69175667b55e9d7de",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "ortak-hesap-app-cd595",
+          "configurations": {
+            "android": "1:159656243067:android:f5f3d69175667b55e9d7de",
+            "ios": "1:159656243067:ios:7ffad5b79acd6370e9d7de",
+            "macos": "1:159656243067:ios:7ffad5b79acd6370e9d7de",
+            "web": "1:159656243067:web:8d08e4bd5dddadeae9d7de",
+            "windows": "1:159656243067:web:263af3c821209065e9d7de"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      
+      "source": "functions"
+    }
+  ]
+}
