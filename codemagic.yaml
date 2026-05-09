@@ -26,13 +26,13 @@ workflows:
       - name: "Set up code signing"
         script: |
           keychain initialize
-          app-store-connect fetch-signing-files com.hasimozudogru.ortakhesap --type IOS_APP_STORE --create
+          app-store-connect fetch-signing-files com.hasimozudogru.ortakhesap --type IOS_APP_STORE --create --platform IOS
           keychain add-certificates
           xcode-project use-profiles
 
       - name: "Build signed IPA"
         script: |
-          flutter build ipa --release
+          flutter build ipa --release --export-method app-store
 
     artifacts:
       - build/ios/ipa/*.ipa
