@@ -8,10 +8,9 @@ workflows:
       flutter: stable
       xcode: latest
       cocoapods: default
-    
-    ios_signing:
-      distribution_type: app_store
-      bundle_identifier: com.hasimozudogru.ortakhesap
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.hasimozudogru.ortakhesap
 
     scripts:
       - name: Get Flutter packages
@@ -24,7 +23,7 @@ workflows:
           pod install
           cd ..
 
-     - name: Build signed IPA
+      - name: Build signed IPA
         script: |
           flutter build ipa --release
 
