@@ -28,15 +28,15 @@ workflows:
           keychain initialize
           app-store-connect fetch-signing-files com.hasimozudogru.ortakhesap --type IOS_APP_STORE --create --platform IOS
           keychain add-certificates
-          xcode-project use-profiles
+          xcode-project use-profiles --project ios/Runner.xcodeproj
 
       - name: "Build signed IPA"
         script: |
           xcode-project build-ipa \
-            --workspace ios/Runner.xcworkspace \
-            --scheme Runner \
-            --archive-xcargs "CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=5Z27VBG353" \
-            --export-options-plist=/Users/builder/export_options.plist
+              --workspace ios/Runner.xcworkspace \
+              --scheme Runner \
+              --archive-xcargs "CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=5Z27VBG353 PRODUCT_BUNDLE_IDENTIFIER=com.hasimozudogru.ortakhesap" \
+              --export-options-plist=/Users/builder/export_options.plist
 
     artifacts:
       - build/ios/ipa/*.ipa
