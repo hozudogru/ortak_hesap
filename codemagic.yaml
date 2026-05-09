@@ -12,8 +12,12 @@ workflows:
       xcode: latest
       cocoapods: default
       ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.hasimozudogru.ortakhesap
+            distribution_type: app_store
+            bundle_identifier: com.hasimozudogru.ortakhesap
+            provisioning_profiles:
+                - ortakhesap-profile
+    certificates:
+      - ortakhesap-cert
 
     scripts:
       - name: "Get Flutter packages"
