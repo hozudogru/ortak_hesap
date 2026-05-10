@@ -9,6 +9,11 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
+import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,15 +43,25 @@ class Expense {
   final String id;
   final String title;
   final double amount;
+  final String currency;
+  final DateTime? createdAt;
   final String paidBy;
   final List<String> participants;
+  final String splitType;
+  final Map<String, double> shares;
+  
 
   Expense({
     required this.id,
     required this.title,
     required this.amount,
+    required this.currency,
     required this.paidBy,
+    this.createdAt,
     required this.participants,
+    required this.splitType,
+    required this.shares,
+    
   });
 }
 class Payment {
@@ -225,7 +240,7 @@ class _HomePageState extends State<HomePage> {
     return (data?['name'] ?? data?['nickname'] ?? email.split('@').first).toString();
   }
 
-  Future<void> addGroupToFirebase(String groupName) async {
+  Future<void> addGroupToFirebase(String groupName, String currency) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
@@ -236,6 +251,7 @@ class _HomePageState extends State<HomePage> {
 
     await groupRef.set({
       'name': groupName.trim(),
+      'currency': currency,
       'ownerId': user.uid,
       'ownerEmail': cleanOwnerEmail,
       'memberIds': [user.uid],
@@ -315,32 +331,76 @@ class _HomePageState extends State<HomePage> {
 
   void showAddGroupDialog() {
     String newGroup = '';
+    String selectedCurrency = 'TRY';
 
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Yeni Grup'),
-          content: TextField(
-            onChanged: (value) => newGroup = value,
-            decoration: const InputDecoration(hintText: 'Grup adı gir'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('İptal'),
+            title: const Text("Yeni Grup"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  onChanged: (value) => newGroup = value,
+                  decoration: const InputDecoration(
+                    labelText: "Grup adı",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+
+                SizedBox(height: 12),
+
+                DropdownButtonFormField<String>(
+                  value: selectedCurrency,
+                  decoration: const InputDecoration(
+                    labelText: "Para Birimi",
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'TRY',
+                      child: Text('TRY - Türk Lirası'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'USD',
+                      child: Text('USD - Amerikan Doları'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'EUR',
+                      child: Text('EUR - Euro'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      selectedCurrency = value;
+                    }
+                  },
+                ),
+              ],
             ),
-            ElevatedButton(
-              onPressed: () async {
-                if (newGroup.trim().isNotEmpty) {
-                  await addGroupToFirebase(newGroup.trim());
-                }
-                if (context.mounted) Navigator.pop(context);
-              },
-              child: const Text('Oluştur'),
-            ),
-          ],
-        );
+
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("İptal"),
+              ),
+
+              ElevatedButton(
+                onPressed: () async {
+                  if (newGroup.trim().isNotEmpty) {
+                    await addGroupToFirebase(
+                      newGroup.trim(),
+                      selectedCurrency,
+                    );
+
+                    if (context.mounted) Navigator.pop(context);
+                  }
+                },
+                child: const Text("Oluştur"),
+              ),
+            ],
+          );
       },
     );
   }
@@ -378,11 +438,11 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void openGroupDetail(String groupName) {
+  void openGroupDetail(String groupName, String groupCurrency) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => GroupDetailPage(groupName: groupName),
+        builder: (context) => GroupDetailPage(groupName: groupName,  groupCurrency: groupCurrency),
       ),
     );
   }
@@ -557,9 +617,9 @@ class _HomePageState extends State<HomePage> {
                 return Column(
                   children: [
                     _buildUserHeader(currentUser),
+
                     Container(
-                      height: 240,
-                      width: double.infinity,
+                     
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
@@ -575,19 +635,22 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 34, 20, 16),
+                        padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             const Text(
                               'Gruplarım',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 28,
+                                fontSize: 26,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const SizedBox(height: 8),
+
+                            const SizedBox(height: 10),
+
                             Text(
                               'Ortak harcamalarını kolayca takip et',
                               style: TextStyle(
@@ -595,7 +658,9 @@ class _HomePageState extends State<HomePage> {
                                 fontSize: 14,
                               ),
                             ),
+
                             const SizedBox(height: 18),
+
                             Row(
                               children: [
                                 Expanded(
@@ -605,7 +670,9 @@ class _HomePageState extends State<HomePage> {
                                     icon: Icons.group,
                                   ),
                                 ),
+
                                 const SizedBox(width: 12),
+
                                 Expanded(
                                   child: _dashboardCard(
                                     title: 'Durum',
@@ -619,6 +686,10 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                     ),
+
+                    const SizedBox(height: 16),
+
+   
                     Expanded(
                       child: docs.isEmpty
                           ? const Center(
@@ -634,6 +705,7 @@ class _HomePageState extends State<HomePage> {
                                 final data = docs[index].data() as Map<String, dynamic>;
                                 final groupName = (data['name'] ?? docs[index].id).toString();
                                 final groupCode = (data['groupCode'] ?? '').toString();
+                                final groupCurrency = (data['currency'] ?? 'TRY').toString();
 
                                 return Card(
                                   margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -750,7 +822,7 @@ class _HomePageState extends State<HomePage> {
                                         ),
                                       ],
                                     ),
-                                    onTap: () => openGroupDetail(groupName),
+                                    onTap: () => openGroupDetail(groupName, groupCurrency),
                                     onLongPress: () {
                                       showDialog(
                                         context: context,
@@ -794,10 +866,12 @@ class _HomePageState extends State<HomePage> {
 
 class GroupDetailPage extends StatefulWidget {
   final String groupName;
+  final String groupCurrency;
 
   const GroupDetailPage({
     super.key,
     required this.groupName,
+    required this.groupCurrency,
   });
 
   @override
@@ -805,6 +879,590 @@ class GroupDetailPage extends StatefulWidget {
 }
 
 class _GroupDetailPageState extends State<GroupDetailPage> {
+  List<Map<String, dynamic>> pdfExpenses = [];
+ Future<void> generateGroupPdf({
+  required BuildContext context,
+  required String groupName,
+  required List<Map<String, dynamic>> expenses,
+}) async {
+  final pdf = pw.Document();
+
+  final fontData = await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
+  final ttf = pw.Font.ttf(fontData);
+
+  double readAmount(Map<String, dynamic> item) {
+    final value = item['tutar'] ??
+        item['amount'] ??
+        item['price'] ??
+        item['total'] ??
+        0;
+
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    if (value is String) {
+      return double.tryParse(value.replaceAll(',', '.')) ?? 0.0;
+    }
+
+    return 0.0;
+  }
+
+  String readText(
+    Map<String, dynamic> item,
+    List<String> keys, {
+    String defaultValue = '-',
+  }) {
+    for (final key in keys) {
+      final value = item[key];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString();
+      }
+    }
+    return defaultValue;
+  }
+
+  List<String> readParticipants(Map<String, dynamic> item) {
+    final value = item['participants'] ??
+        item['katilanlar'] ??
+        item['selectedParticipants'] ??
+        item['members'];
+
+    if (value is List) {
+      return value.map((e) => e.toString()).toList();
+    }
+
+    return [];
+  }
+
+  String readDate(Map<String, dynamic> item) {
+    final value = item['date'] ??
+        item['createdAt'] ??
+        item['tarih'] ??
+        item['timestamp'];
+
+    if (value == null) return '-';
+
+    try {
+      if (value is Timestamp) {
+        return value.toDate().toString().substring(0, 19);
+      }
+    } catch (_) {}
+
+    return value.toString();
+  }
+
+  final double totalExpense = expenses.fold(
+    0.0,
+    (sum, item) => sum + readAmount(item),
+  );
+
+  final Set<String> allParticipants = {};
+
+  for (final expense in expenses) {
+    allParticipants.addAll(readParticipants(expense));
+  }
+
+  final int participantCount =
+      allParticipants.isEmpty ? 1 : allParticipants.length;
+
+  final double perPersonAmount = totalExpense / participantCount;
+  final double pageWidth = PdfPageFormat.a4.width - 44;
+final Map<String, double> balances = {};
+
+for (final expense in expenses) {
+  final amount = readAmount(expense);
+  final paidBy = readText(
+    expense,
+    [
+      'paidBy',
+      'odeyen',
+      'ödeyen',
+      'payer',
+      'paidByEmail',
+    ],
+    defaultValue: '',
+  );
+
+  final participants = readParticipants(expense);
+
+  if (amount <= 0 || paidBy.isEmpty || participants.isEmpty) {
+    continue;
+  }
+
+  final double share = amount / participants.length;
+
+  balances[paidBy] = (balances[paidBy] ?? 0) + amount;
+
+  for (final participant in participants) {
+    balances[participant] = (balances[participant] ?? 0) - share;
+  }
+}
+
+final List<Map<String, dynamic>> debtors = [];
+final List<Map<String, dynamic>> creditors = [];
+
+balances.forEach((person, balance) {
+  if (balance < -0.01) {
+    debtors.add({
+      'person': person,
+      'amount': -balance,
+    });
+  } else if (balance > 0.01) {
+    creditors.add({
+      'person': person,
+      'amount': balance,
+    });
+  }
+});
+
+final List<Map<String, dynamic>> paymentPlan = [];
+
+int debtorIndex = 0;
+int creditorIndex = 0;
+
+while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
+  final debtor = debtors[debtorIndex];
+  final creditor = creditors[creditorIndex];
+
+  final double debtAmount = debtor['amount'] as double;
+  final double creditAmount = creditor['amount'] as double;
+
+  final double paymentAmount =
+      debtAmount < creditAmount ? debtAmount : creditAmount;
+
+  paymentPlan.add({
+    'from': debtor['person'],
+    'to': creditor['person'],
+    'amount': paymentAmount,
+  });
+
+  debtor['amount'] = debtAmount - paymentAmount;
+  creditor['amount'] = creditAmount - paymentAmount;
+
+  if ((debtor['amount'] as double) <= 0.01) {
+    debtorIndex++;
+  }
+
+  if ((creditor['amount'] as double) <= 0.01) {
+    creditorIndex++;
+  }
+}
+print('PAYMENT PLAN: $paymentPlan');
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(22),
+      theme: pw.ThemeData.withFont(
+        base: ttf,
+        bold: ttf,
+      ),
+      build: (context) {
+        return [
+          pw.Container(
+            
+            padding: const pw.EdgeInsets.all(14),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.indigo50,
+              borderRadius: pw.BorderRadius.circular(10),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  groupName,
+                  style: pw.TextStyle(
+                    fontSize: 20,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  'Ortak Hesap PDF Raporu',
+                  style: const pw.TextStyle(
+                    fontSize: 10,
+                    color: PdfColors.grey700,
+                  ),
+                ),
+                pw.SizedBox(height: 3),
+                pw.Text(
+                  'Rapor Tarihi: ${DateTime.now().toString().substring(0, 16)}',
+                  style: const pw.TextStyle(
+                    fontSize: 9,
+                    color: PdfColors.grey600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 10),
+
+          pw.Row(
+            children: [
+              _pdfSummaryBox(
+                title: 'Toplam Harcama',
+                value: '${totalExpense.toStringAsFixed(2)} TRY',
+              ),
+              pw.SizedBox(width: 10),
+              _pdfSummaryBox(
+                title: 'Katılımcı Sayısı',
+                value: participantCount.toString(),
+              ),
+              pw.SizedBox(width: 10),
+              _pdfSummaryBox(
+                title: 'Kişi Başı',
+                value: '${perPersonAmount.toStringAsFixed(2)} TRY',
+              ),
+            ],
+          ),
+
+          pw.SizedBox(height: 24),
+
+          pw.Text(
+            'Harcamalar',
+            style: pw.TextStyle(
+              fontSize: 18,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+
+          pw.SizedBox(height: 10),
+
+          if (expenses.isEmpty)
+            pw.Text(
+              'Henüz harcama bulunmamaktadır.',
+              style: const pw.TextStyle(fontSize: 11),
+            ),
+
+          ...expenses.map((expense) {
+            final title = readText(
+              expense,
+              [
+                'harcamaAdi',
+                'harcamaAdı',
+                'title',
+                'name',
+                'ad',
+                'description',
+              ],
+              defaultValue: 'Harcama',
+            );
+
+            final amount = readAmount(expense);
+
+            final paidBy = readText(
+              expense,
+              [
+                'paidBy',
+                'odeyen',
+                'ödeyen',
+                'payer',
+                'paidByEmail',
+              ],
+            );
+
+            final splitType = readText(
+              expense,
+              [
+                'splitType',
+                'bolusumTipi',
+                'bölüşümTipi',
+                'divisionType',
+              ],
+              defaultValue: 'Eşit Böl',
+            );
+              final splitTypeText = splitType == 'custom'
+                  ? 'Özel Bölüşüm'
+                  : splitType == 'equal'
+                      ? 'Eşit Böl'
+                      : splitType;
+            final participantsList = readParticipants(expense);
+
+            final participants =
+                participantsList.isNotEmpty ? participantsList.join(', ') : '-';
+
+            final date = readDate(expense);
+
+            return pw.Container(
+              
+              margin: const pw.EdgeInsets.only(bottom: 7),
+              padding: const pw.EdgeInsets.all(9),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300),
+                borderRadius: pw.BorderRadius.circular(10),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Expanded(
+                        child: pw.Text(
+                          title,
+                          style: pw.TextStyle(
+                            fontSize: 15,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      pw.SizedBox(width: 12),
+                      pw.Text(
+                        '${amount.toStringAsFixed(2)} TRY',
+                        style: pw.TextStyle(
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.SizedBox(height: 14),
+
+
+                    ],
+                  ),
+                  pw.SizedBox(height: 8),
+                  _pdfInfoRow('Ödeyen', paidBy),
+                  _pdfInfoRow('Bölüşüm Tipi', splitTypeText),
+                  _pdfInfoRow('Katılanlar', participants),
+                  _pdfInfoRow('Tarih', date),
+                ],
+              ),
+            );
+          }),
+
+          pw.SizedBox(height: 18),
+
+          pw.Text(
+            'Katılımcılar',
+            style: pw.TextStyle(
+              fontSize: 18,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+
+          pw.SizedBox(height: 8),
+
+          if (allParticipants.isEmpty)
+            pw.Text(
+              'Katılımcı bilgisi bulunmamaktadır.',
+              style: const pw.TextStyle(fontSize: 11),
+            )
+          else
+            pw.Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: allParticipants.map((name) {
+                return pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.grey200,
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Text(
+                    name,
+                    style: const pw.TextStyle(fontSize: 10),
+                  ),
+                );
+              }).toList(),
+            ),
+pw.SizedBox(height: 12),
+
+pw.Text(
+  'Ödeme Planı',
+  style: pw.TextStyle(
+    fontSize: 18,
+    fontWeight: pw.FontWeight.bold,
+  ),
+),
+
+
+pw.SizedBox(height: 8),
+
+if (paymentPlan.isEmpty)
+  pw.Container(
+    
+    padding: const pw.EdgeInsets.all(10),
+    decoration: pw.BoxDecoration(
+      color: PdfColors.grey100,
+      border: pw.Border.all(color: PdfColors.grey300),
+      borderRadius: pw.BorderRadius.circular(7),
+    ),
+    child: pw.Text(
+      'Ödeme planı oluşturulacak borç/alacak bilgisi bulunmamaktadır.',
+      style: const pw.TextStyle(fontSize: 10),
+    ),
+  )
+else
+  pw.Column(
+    children: paymentPlan.map((payment) {
+      final from = payment['from'].toString();
+      final to = payment['to'].toString();
+      final amount = payment['amount'] as double;
+
+      return pw.Container(
+        
+        margin: const pw.EdgeInsets.only(bottom: 4),
+        padding: const pw.EdgeInsets.all(9),
+        decoration: pw.BoxDecoration(
+          color: PdfColors.grey100,
+          border: pw.Border.all(color: PdfColors.grey300),
+          borderRadius: pw.BorderRadius.circular(7),
+        ),
+        child: pw.Text(
+          '$from, $to kişisine ${amount.toStringAsFixed(2)} TRY ödeyecek.',
+          style: const pw.TextStyle(fontSize: 10),
+        ),
+      );
+    }).toList(),
+  ),
+          pw.SizedBox(height: 22),
+
+          pw.Text(
+            'Özet',
+            style: pw.TextStyle(
+              fontSize: 15,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+
+          pw.SizedBox(
+  width: pageWidth,
+  child: pw.Table(
+    border: pw.TableBorder.all(color: PdfColors.grey300),
+    columnWidths: {
+      0: const pw.FlexColumnWidth(2),
+      1: const pw.FlexColumnWidth(2),
+    },
+    children: [
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(
+          color: PdfColors.grey200,
+        ),
+        children: [
+          _pdfTableCell('Bilgi', isHeader: true),
+          _pdfTableCell('Değer', isHeader: true),
+        ],
+      ),
+      pw.TableRow(
+        children: [
+          _pdfTableCell('Toplam Harcama'),
+          _pdfTableCell('${totalExpense.toStringAsFixed(2)} TRY'),
+        ],
+      ),
+      pw.TableRow(
+        children: [
+          _pdfTableCell('Katılımcı Sayısı'),
+          _pdfTableCell(participantCount.toString()),
+        ],
+      ),
+      pw.TableRow(
+        children: [
+          _pdfTableCell('Kişi Başı Ortalama'),
+          _pdfTableCell('${perPersonAmount.toStringAsFixed(2)} TRY'),
+        ],
+      ),
+    ],
+  ),
+),
+        ];
+      },
+    ),
+  );
+
+  await Printing.layoutPdf(
+  onLayout: (PdfPageFormat format) async => pdf.save(),
+);
+
+if (!mounted) return;
+
+ScaffoldMessenger.of(context).showSnackBar(
+  const SnackBar(
+    content: Text('PDF raporu oluşturuldu.'),
+  ),
+);
+}
+pw.Widget _pdfSummaryBox({
+  required String title,
+  required String value,
+}) {
+  return pw.Expanded(
+    child: pw.Container(
+      padding: const pw.EdgeInsets.all(18),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300),
+        borderRadius: pw.BorderRadius.circular(10),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            title,
+            style: const pw.TextStyle(
+              fontSize: 10,
+              color: PdfColors.grey600,
+            ),
+          ),
+          pw.SizedBox(height: 6),
+          pw.Text(
+            value,
+            style: pw.TextStyle(
+              fontSize: 13,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+pw.Widget _pdfInfoRow(String label, String value) {
+  return pw.Padding(
+    padding: const pw.EdgeInsets.only(bottom: 4),
+    child: pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.SizedBox(
+          width: 85,
+          child: pw.Text(
+            '$label:',
+            style: pw.TextStyle(
+              fontSize: 10,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+        ),
+        pw.Expanded(
+          child: pw.Text(
+            value,
+            style: const pw.TextStyle(fontSize: 10),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+pw.Widget _pdfTableCell(
+  String text, {
+  bool isHeader = false,
+}) {
+  return pw.Padding(
+    padding: const pw.EdgeInsets.all(6),
+    child: pw.Text(
+      text,
+      style: pw.TextStyle(
+        fontSize: 10,
+        fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+      ),
+    ),
+  );
+  }
+
   Future<void> markDebtAsPaid({
     required String fromEmail,
     required String toEmail,
@@ -859,10 +1517,13 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
         .add({
       'title': expense.title,
       'amount': expense.amount,
+      'currency': expense.currency,
       'paidBy': payerEmail,
       'paidByUid': user?.uid,
       'paidByEmail': payerEmail,
       'participants': expense.participants.map((e) => e.trim().toLowerCase()).toList(),
+      'splitType': expense.splitType,
+      'shares': expense.shares,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
@@ -877,6 +1538,8 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
       'title': expense.title,
       'amount': expense.amount,
       'participants': expense.participants.map((e) => e.trim().toLowerCase()).toList(),
+      'splitType': expense.splitType,
+      'shares': expense.shares,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -899,7 +1562,14 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
         .delete();
   }
 
-  void showAddExpenseDialog(List<String> memberEmails) {
+  void showAddExpenseDialog(List<String> memberEmails) async {
+    final groupDoc = await FirebaseFirestore.instance
+    .collection('groups')
+    .doc(widget.groupName)
+    .get();
+
+final groupCurrency =
+    (groupDoc.data()?['currency'] ?? 'TRY').toString();
     if (memberEmails.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Önce üye eklemelisin')),
@@ -909,6 +1579,8 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
 
     String title = '';
     String amount = '';
+    String splitType = "equal";
+    final Map<String, TextEditingController> shareControllers = {};
     final currentUser = FirebaseAuth.instance.currentUser;
     final selectedPaidBy = currentUser?.email?.trim().toLowerCase() ?? '';
     final List<String> selectedParticipants = List.from(memberEmails);
@@ -921,60 +1593,168 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
             return AlertDialog(
               title: const Text('Harcama Ekle'),
               content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      onChanged: (value) => title = value,
-                      decoration: const InputDecoration(hintText: 'Harcama adı'),
-                    ),
-                    TextField(
-                      keyboardType: TextInputType.number,
-                      onChanged: (value) => amount = value,
-                      decoration: const InputDecoration(hintText: 'Tutar'),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Ödeyen: $selectedPaidBy',
-                      style: const TextStyle(fontSize: 13, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 12),
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('Kimler katıldı?', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                    ...memberEmails.map((email) {
-                      return CheckboxListTile(
-                        value: selectedParticipants.contains(email),
-                        title: Text(email.split('@').first),
-                        subtitle: Text(email, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                        onChanged: (checked) {
-                          setDialogState(() {
-                            if (checked == true) {
-                              if (!selectedParticipants.contains(email)) selectedParticipants.add(email);
-                            } else {
-                              selectedParticipants.remove(email);
-                            }
-                          });
-                        },
-                      );
-                    }),
-                  ],
-                ),
+  child: Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      TextField(
+        controller: TextEditingController(text: title),
+        onChanged: (value) => title = value,
+        decoration: const InputDecoration(hintText: 'Harcama adı'),
+      ),
+      
+TextField(
+        controller: TextEditingController(text: amount),
+        keyboardType: TextInputType.number,
+        onChanged: (value) => amount = value,
+        decoration: const InputDecoration(hintText: 'Tutar'),
+      ),
+      
+      const SizedBox(height: 12),
+
+      DropdownButtonFormField<String>(
+        value: splitType,
+        decoration: const InputDecoration(
+          labelText: "Bölüşüm Tipi",
+          border: OutlineInputBorder(),
+        ),
+        items: const [
+          DropdownMenuItem(
+            value: "equal",
+            child: Text("Eşit Böl"),
+          ),
+          DropdownMenuItem(
+            value: "custom",
+            child: Text("Kişiye Göre Tutar"),
+          ),
+        ],
+        onChanged: (value) {
+          if (value != null) {
+            setDialogState(() {
+              splitType = value;
+            });
+          }
+        },
+      ),
+      const SizedBox(height: 16),
+          const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Kimler katıldı?',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
+            ),
+      const SizedBox(height: 12),
+              ...memberEmails.map((email) {
+                final name = email.split("@").first;
+
+                return CheckboxListTile(
+                  value: selectedParticipants.contains(email),
+                  title: Text(name),
+                  onChanged: (checked) {
+                    setDialogState(() {
+                      if (checked == true) {
+                        if (!selectedParticipants.contains(email)) {
+                          selectedParticipants.add(email);
+                        }
+
+                        shareControllers.putIfAbsent(
+                          email,
+                          () => TextEditingController(
+                            text: "",
+                          ),
+                        );
+                      } else {
+                        selectedParticipants.remove(email);
+                      }
+                    });
+                  },
+                );
+              }).toList(),
+
+              if (splitType == "custom") ...[
+                const SizedBox(height: 12),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    "Kişi Payları",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                ...selectedParticipants.map((email) {
+                  shareControllers.putIfAbsent(
+                    email,
+                    () => TextEditingController(text: ""),
+                    
+                  );
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: TextField(
+                      controller: shareControllers[email],
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: "${email.split("@").first} payı",
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ],
+            ],
+          ),
+        ),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(context), child: const Text('İptal')),
                 ElevatedButton(
                   onPressed: () async {
                     final parsedAmount = double.tryParse(amount.replaceAll(',', '.'));
                     if (title.trim().isNotEmpty && parsedAmount != null && selectedParticipants.isNotEmpty) {
+                      final Map<String, double> customShares = {};
+
+                      if (splitType == "custom") {
+                        double totalShares = 0;
+
+                        for (final email in selectedParticipants) {
+                          final text = shareControllers[email]?.text ?? "0";
+                          final value = double.tryParse(text.replaceAll(",", ".")) ?? 0;
+
+                          if (value <= 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text("${email.split("@").first} için tutar gir"),
+                              ),
+                            );
+                            return;
+                          }
+
+                          customShares[email] = value;
+                          totalShares += value;
+                        }
+
+                        if ((totalShares - parsedAmount).abs() > 0.01) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                "Kişi payları toplamı harcama tutarına eşit olmalı. Toplam: ${totalShares.toStringAsFixed(2)}",
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+                      }
+
                       await saveExpenseToFirebase(
                         Expense(
                           id: '',
                           title: title.trim(),
                           amount: parsedAmount,
+                          currency: groupCurrency,
                           paidBy: selectedPaidBy,
                           participants: selectedParticipants,
+                          splitType: splitType,
+                          shares: splitType == "custom" ? customShares : {},
                         ),
                       );
                     }
@@ -990,88 +1770,239 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     );
   }
 
-  void showEditExpenseDialog(
-    Expense expense,
-    List<String> memberEmails,
-    Map<String, String> emailToName,
-  ) {
-    String title = expense.title;
-    String amount = expense.amount.toString();
-    final List<String> selectedParticipants = List.from(expense.participants);
+void showEditExpenseDialog(
+  Expense expense,
+  List<String> memberEmails,
+  Map<String, String> emailToName,
+) {
+  String title = expense.title;
+  String amount = expense.amount.toString();
+  String splitType = expense.splitType;
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Harcama Düzenle'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: TextEditingController(text: title),
-                      onChanged: (value) => title = value,
-                      decoration: const InputDecoration(hintText: 'Harcama adı'),
-                    ),
-                    TextField(
-                      controller: TextEditingController(text: amount),
-                      keyboardType: TextInputType.number,
-                      onChanged: (value) => amount = value,
-                      decoration: const InputDecoration(hintText: 'Tutar'),
-                    ),
-                    const SizedBox(height: 12),
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('Kimler katıldı?', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                    ...memberEmails.map((email) {
-                      final name = displayNameForEmail(email, emailToName);
-                      return CheckboxListTile(
-                        value: selectedParticipants.contains(email),
-                        title: Text(name),
-                        onChanged: (checked) {
-                          setDialogState(() {
-                            if (checked == true) {
-                              if (!selectedParticipants.contains(email)) selectedParticipants.add(email);
-                            } else {
-                              selectedParticipants.remove(email);
-                            }
-                          });
-                        },
-                      );
-                    }),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('İptal')),
-                ElevatedButton(
-                  onPressed: () async {
-                    final parsedAmount = double.tryParse(amount.replaceAll(',', '.'));
-                    if (title.trim().isNotEmpty && parsedAmount != null && selectedParticipants.isNotEmpty) {
-                      await updateExpenseFromFirebase(
-                        Expense(
-                          id: expense.id,
-                          title: title.trim(),
-                          amount: parsedAmount,
-                          paidBy: expense.paidBy,
-                          participants: selectedParticipants,
-                        ),
-                      );
-                    }
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                  child: const Text('Kaydet'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+  final titleController = TextEditingController(text: title);
+  final amountController = TextEditingController(text: amount);
+
+  final Map<String, TextEditingController> shareControllers = {};
+
+  for (final email in expense.participants) {
+    final shareValue = expense.shares[email];
+
+    shareControllers[email] = TextEditingController(
+      text: shareValue != null ? shareValue.toStringAsFixed(2) : "",
     );
   }
+
+  final List<String> selectedParticipants = List.from(expense.participants);
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Harcama Düzenle'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    onChanged: (value) => title = value,
+                    decoration: const InputDecoration(
+                      hintText: 'Harcama adı',
+                    ),
+                  ),
+
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    onChanged: (value) => amount = value,
+                    decoration: const InputDecoration(
+                      hintText: 'Tutar',
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  DropdownButtonFormField<String>(
+                    value: splitType,
+                    decoration: const InputDecoration(
+                      labelText: "Bölüşüm Tipi",
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: "equal",
+                        child: Text("Eşit Böl"),
+                      ),
+                      DropdownMenuItem(
+                        value: "custom",
+                        child: Text("Kişiye Göre Tutar"),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          splitType = value;
+                        });
+                      }
+                    },
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Kimler katıldı?',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+
+                  ...memberEmails.map((email) {
+                    final name = displayNameForEmail(email, emailToName);
+
+                    return CheckboxListTile(
+                      value: selectedParticipants.contains(email),
+                      title: Text(name),
+                      subtitle: Text(
+                        email,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      onChanged: (checked) {
+                        setDialogState(() {
+                          if (checked == true) {
+                            if (!selectedParticipants.contains(email)) {
+                              selectedParticipants.add(email);
+                            }
+
+                            shareControllers.putIfAbsent(
+                              email,
+                              () => TextEditingController(
+                                text: expense.shares[email]?.toStringAsFixed(2) ?? "",
+                              ),
+                            );
+                          } else {
+                            selectedParticipants.remove(email);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+
+                  if (splitType == "custom") ...[
+                    const SizedBox(height: 12),
+
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "Kişi Payları",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    ...selectedParticipants.map((email) {
+                      shareControllers.putIfAbsent(
+                        email,
+                        () => TextEditingController(
+                          text: expense.shares[email]?.toStringAsFixed(2) ?? "",
+                        ),
+                      );
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: TextField(
+                          controller: shareControllers[email],
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText:
+                                "${displayNameForEmail(email, emailToName)} payı",
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('İptal'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final parsedAmount =
+                      double.tryParse(amount.replaceAll(',', '.'));
+
+                  final Map<String, double> customShares = {};
+
+                  if (title.trim().isNotEmpty &&
+                      parsedAmount != null &&
+                      selectedParticipants.isNotEmpty) {
+                    if (splitType == "custom") {
+                      double totalShares = 0;
+
+                      for (final email in selectedParticipants) {
+                        final text = shareControllers[email]?.text ?? "0";
+                        final value =
+                            double.tryParse(text.replaceAll(",", ".")) ?? 0;
+
+                        if (value <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                "${displayNameForEmail(email, emailToName)} için tutar gir",
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        customShares[email] = value;
+                        totalShares += value;
+                      }
+
+                      if ((totalShares - parsedAmount).abs() > 0.01) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              "Kişi payları toplamı harcama tutarına eşit olmalı. Toplam: ${totalShares.toStringAsFixed(2)}",
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                    }
+
+                    await updateExpenseFromFirebase(
+                      Expense(
+                        id: expense.id,
+                        title: title.trim(),
+                        amount: parsedAmount,
+                        splitType: splitType,
+                        shares: splitType == "custom" ? customShares : {},
+                        currency: expense.currency,
+                        paidBy: expense.paidBy,
+                        participants: selectedParticipants,
+                      ),
+                    );
+                  }
+
+                  if (context.mounted) Navigator.pop(context);
+                },
+                child: const Text('Kaydet'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
 
   double calculateTotal(List<Expense> expenseList) {
     double total = 0;
@@ -1082,23 +2013,35 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
   }
 
   Map<String, double> calculateBalanceFromExpenses(
-    List<Expense> expenseList,
-    List<String> memberEmails,
-  ) {
-    final Map<String, double> balance = {for (final email in memberEmails) email: 0};
+  List<Expense> expenseList,
+  List<String> memberEmails,
+) {
+  final Map<String, double> balance = {
+    for (final email in memberEmails) email: 0.0,
+  };
 
-    for (final expense in expenseList) {
-      final participants = expense.participants.isEmpty ? memberEmails : expense.participants;
-      if (participants.isEmpty) continue;
-      final share = expense.amount / participants.length;
+  for (final expense in expenseList) {
+    balance[expense.paidBy] =
+        (balance[expense.paidBy] ?? 0) + expense.amount;
 
-      balance[expense.paidBy] = (balance[expense.paidBy] ?? 0) + expense.amount;
-      for (final participant in participants) {
-        balance[participant] = (balance[participant] ?? 0) - share;
+    if (expense.splitType == "custom") {
+      expense.shares.forEach((email, shareAmount) {
+        balance[email] = (balance[email] ?? 0) - shareAmount;
+      });
+    } else {
+      if (expense.participants.isEmpty) continue;
+
+      final share = expense.amount / expense.participants.length;
+
+      for (final participant in expense.participants) {
+        balance[participant] =
+            (balance[participant] ?? 0) - share;
       }
     }
-    return balance;
   }
+
+  return balance;
+}
 
   Map<String, double> applyPaymentsToBalance(
     Map<String, double> balance,
@@ -1157,7 +2100,7 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
       final email = totals.keys.first;
       return Center(
         child: Text(
-          '${displayNameForEmail(email, emailToName)}\n${totals.values.first.toStringAsFixed(2)} TL ödedi',
+          '${email.split("@").first}\n${totals.values.first.toStringAsFixed(2)} TL ödedi',
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
@@ -1240,17 +2183,45 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
               .snapshots(),
           builder: (context, expenseSnapshot) {
             final expenseDocs = expenseSnapshot.data?.docs ?? [];
-            final firebaseExpenses = expenseDocs.map((doc) {
+            final List<Expense> firebaseExpenses = expenseDocs.map((doc) {
               final data = doc.data() as Map<String, dynamic>;
               return Expense(
                 id: doc.id,
                 title: (data['title'] ?? '').toString(),
                 amount: (data['amount'] ?? 0).toDouble(),
-                paidBy: (data['paidByEmail'] ?? data['paidBy'] ?? '').toString().trim().toLowerCase(),
-                participants: List<String>.from(data['participants'] ?? []).map((e) => e.trim().toLowerCase()).toList(),
+                createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+                currency: (data['currency'] ?? 'TRY').toString(),
+                paidBy: (data['paidBy'] ?? '').toString(),
+                participants: List<String>.from(data['participants'] ?? []),
+                splitType: (data['splitType'] ?? 'equal').toString(),
+                shares: Map<String, double>.from(
+                  (data['shares'] ?? {}).map(
+                    (key, value) => MapEntry(
+                      key.toString(),
+                      (value as num).toDouble(),
+                    ),
+                  ),
+                ),
               );
             }).toList();
+            pdfExpenses = expenseDocs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
 
+            return {
+              'title': data['title'] ?? '',
+              'amount': data['amount'] ?? 0,
+              'createdAt': data['createdAt'],
+              'currency': data['currency'] ?? 'TRY',
+
+              // PDF için gerekli ek alanlar
+              'paidBy': data['paidBy'] ?? data['payer'] ?? data['odeyen'] ?? '',
+              'splitType': data['splitType'] ?? data['bolusumTipi'] ?? 'Eşit Böl',
+              'participants': data['participants'] ??
+                  data['katilanlar'] ??
+                  data['selectedParticipants'] ??
+                  [],
+            };
+          }).toList();    
             return StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('groups')
@@ -1270,7 +2241,10 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                 }).toList();
 
                 final totalAmount = calculateTotal(firebaseExpenses);
-                final perPersonAmount = memberEmails.isEmpty ? 0 : totalAmount / memberEmails.length;
+                final groupCurrency = widget.groupCurrency;
+
+                final perPersonAmount =
+                    memberEmails.isEmpty ? 0 : totalAmount / memberEmails.length;
                 final rawBalances = calculateBalanceFromExpenses(firebaseExpenses, memberEmails);
                 final balances = applyPaymentsToBalance(rawBalances, payments);
                 final debts = calculateDebtsFromBalance(balances);
@@ -1280,9 +2254,22 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                   child: Scaffold(
                     appBar: AppBar(
                       title: Text(widget.groupName),
+                      
                       actions: [
                         IconButton(
-                          icon: const Icon(Icons.notifications),
+                                icon: const Icon(Icons.picture_as_pdf),
+                                onPressed: () {
+                                  print('PDF harcama sayısı: ${pdfExpenses.length}');
+                                  print('PDF harcama içeriği: $pdfExpenses');
+                                 generateGroupPdf(
+                                    context: context,
+                                    groupName: widget.groupName,
+                                    expenses: pdfExpenses,
+                                  );
+                                },
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.notifications),
                           onPressed: () {
                             Navigator.push(
                               context,
@@ -1291,18 +2278,42 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                           },
                         ),
                       ],
-                      bottom: const TabBar(
-                        indicatorColor: Colors.white,
-                        labelColor: Colors.white,
-                        unselectedLabelColor: Colors.white70,
-                        tabs: [
-                          Tab(icon: Icon(Icons.payments), text: 'Harcamalar'),
-                          Tab(icon: Icon(Icons.people), text: 'Üyeler'),
-                          Tab(icon: Icon(Icons.account_balance), text: 'Borçlar'),
-                          Tab(icon: Icon(Icons.pie_chart), text: 'Grafik'),
-                          Tab(icon: Icon(Icons.history), text: 'Geçmiş'),
-                        ],
-                      ),
+                     bottom: const TabBar(
+  indicatorColor: Colors.white,
+  labelColor: Colors.white,
+  unselectedLabelColor: Colors.white70,
+  labelStyle: TextStyle(
+    fontSize: 10,
+    fontWeight: FontWeight.w600,
+  ),
+  unselectedLabelStyle: TextStyle(
+    fontSize: 9,
+    fontWeight: FontWeight.w500,
+  ),
+  indicatorSize: TabBarIndicatorSize.tab,
+  tabs: [
+    Tab(
+      icon: Icon(Icons.payments, size: 19),
+      text: 'Gider',
+    ),
+    Tab(
+      icon: Icon(Icons.people, size: 19),
+      text: 'Üyeler',
+    ),
+    Tab(
+      icon: Icon(Icons.account_balance, size: 19),
+      text: 'Borç',
+    ),
+    Tab(
+      icon: Icon(Icons.pie_chart, size: 19),
+      text: 'Grafik',
+    ),
+    Tab(
+      icon: Icon(Icons.history, size: 19),
+      text: 'Geçmiş',
+    ),
+  ],
+),
                     ),
                     body: Column(
                       children: [
@@ -1322,8 +2333,11 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                                       const Text('Toplam Harcama', style: TextStyle(color: Colors.grey)),
                                       const SizedBox(height: 4),
                                       Text(
-                                        '${totalAmount.toStringAsFixed(2)} TL',
-                                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                        "${totalAmount.toStringAsFixed(2)} $groupCurrency",
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -1333,7 +2347,7 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                                       const Text('Kişi Başı', style: TextStyle(color: Colors.grey)),
                                       const SizedBox(height: 4),
                                       Text(
-                                        '${perPersonAmount.toStringAsFixed(2)} TL',
+                                        '${perPersonAmount.toStringAsFixed(2)} $groupCurrency',
                                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                                       ),
                                     ],
@@ -1386,8 +2400,51 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
           child: ListTile(
             leading: const Icon(Icons.payments, color: Colors.teal),
             title: Text(expense.title),
-            subtitle: Text('Ödeyen: $payerName'),
-            trailing: Text('${expense.amount.toStringAsFixed(2)} TL', style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Ödeyen: $payerName'),
+
+                  const SizedBox(height: 4),
+
+                  Text(
+                    'Katılanlar: ${expense.participants.map((email) => displayNameForEmail(email, emailToName)).join(", ")}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+
+                  const SizedBox(height: 2),
+
+                  Text(
+                    expense.splitType == "custom"
+                        ? "Bölüşüm: Kişiye Göre"
+                        : "Bölüşüm: Eşit Böl",
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 2),
+
+                  Text(
+                    expense.createdAt != null
+                        ? "Tarih: ${expense.createdAt!.day.toString().padLeft(2, '0')}.${expense.createdAt!.month.toString().padLeft(2, '0')}.${expense.createdAt!.year} "
+                          "${expense.createdAt!.hour.toString().padLeft(2, '0')}:${expense.createdAt!.minute.toString().padLeft(2, '0')}"
+                        : "Tarih yok",
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            trailing: Text('${expense.amount.toStringAsFixed(2)} ${expense.currency}', style: const TextStyle(fontWeight: FontWeight.bold)
+            ),
+            onTap: () {
+              showEditExpenseDialog(
+                expense,
+                memberEmails,
+                emailToName,
+              );
+            },
             onLongPress: () {
               showModalBottomSheet(
                 context: context,
@@ -1461,7 +2518,7 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
           const Padding(padding: EdgeInsets.all(16), child: Text('Henüz üye yok'))
         else
           ...memberEmails.map((email) {
-            final name = displayNameForEmail(email, emailToName);
+            final name = email.split("@").first;
             final docId = emailToDocId[email];
             return Card(
               margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1512,7 +2569,7 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
         const ListTile(title: Text('Borç / Alacak Durumu')),
         ...memberEmails.map((email) {
           final value = balances[email] ?? 0;
-          final name = displayNameForEmail(email, emailToName);
+          final name = email.split("@").first;
           Color color;
           String text;
           if (value > 0) {
