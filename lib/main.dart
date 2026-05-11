@@ -517,6 +517,22 @@ class _HomePageState extends State<HomePage> {
                 icon: const Icon(Icons.group_add, color: Colors.teal),
                 onPressed: showJoinGroupDialog,
               ),
+              IconButton(
+                tooltip: "QR ile katıl",
+                icon: const Icon(Icons.qr_code_scanner, color: Colors.teal),
+                onPressed: () async {
+                  final code = await Navigator.push<String>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const GroupQrScannerPage(),
+                    ),
+                  );
+
+    if (code != null && code.isNotEmpty) {
+      await joinGroupByCode(code);
+    }
+  },
+),
             ],
           ),
         );
@@ -879,6 +895,12 @@ class GroupDetailPage extends StatefulWidget {
 }
 
 class _GroupDetailPageState extends State<GroupDetailPage> {
+  String nameForPdf(
+  String email,
+  Map<String, String> emailToName,
+) {
+  return emailToName[email] ?? email.split("@").first;
+}
   List<Map<String, dynamic>> pdfExpenses = [];
  Future<void> generateGroupPdf({
   required BuildContext context,
@@ -951,7 +973,12 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
 
     return value.toString();
   }
-
+String displayName(String value) {
+  if (value.contains('@')) {
+    return value.split('@').first;
+  }
+  return value;
+}
   final double totalExpense = expenses.fold(
     0.0,
     (sum, item) => sum + readAmount(item),
@@ -1179,8 +1206,9 @@ print('PAYMENT PLAN: $paymentPlan');
                       : splitType;
             final participantsList = readParticipants(expense);
 
-            final participants =
-                participantsList.isNotEmpty ? participantsList.join(', ') : '-';
+            final participants = participantsList.isNotEmpty
+                ? participantsList.map((e) => displayName(e)).join(', ')
+                : '-';
 
             final date = readDate(expense);
 
@@ -1222,7 +1250,7 @@ print('PAYMENT PLAN: $paymentPlan');
                     ],
                   ),
                   pw.SizedBox(height: 8),
-                  _pdfInfoRow('Ödeyen', paidBy),
+                  _pdfInfoRow('Ödeyen', displayName(paidBy)),
                   _pdfInfoRow('Bölüşüm Tipi', splitTypeText),
                   _pdfInfoRow('Katılanlar', participants),
                   _pdfInfoRow('Tarih', date),
@@ -1263,7 +1291,7 @@ print('PAYMENT PLAN: $paymentPlan');
                     borderRadius: pw.BorderRadius.circular(8),
                   ),
                   child: pw.Text(
-                    name,
+                    displayName(name),
                     style: const pw.TextStyle(fontSize: 10),
                   ),
                 );
@@ -1299,8 +1327,8 @@ if (paymentPlan.isEmpty)
 else
   pw.Column(
     children: paymentPlan.map((payment) {
-      final from = payment['from'].toString();
-      final to = payment['to'].toString();
+      final from = displayName(payment['from'].toString());
+      final to = displayName(payment['to'].toString());
       final amount = payment['amount'] as double;
 
       return pw.Container(
@@ -2055,7 +2083,10 @@ void showEditExpenseDialog(
     return updatedBalance;
   }
 
-  List<String> calculateDebtsFromBalance(Map<String, double> balance) {
+  List<String> calculateDebtsFromBalance(
+  Map<String, double> balance,
+  String groupCurrency,
+) {
     final List<MapEntry<String, double>> creditors = [];
     final List<MapEntry<String, double>> debtors = [];
 
@@ -2073,7 +2104,7 @@ void showEditExpenseDialog(
 
     while (i < debtors.length && j < creditors.length) {
       final amount = debtors[i].value < creditors[j].value ? debtors[i].value : creditors[j].value;
-      result.add('${debtors[i].key} → ${creditors[j].key}: ${amount.toStringAsFixed(2)} TL');
+      result.add('${debtors[i].key} → ${creditors[j].key}: ${amount.toStringAsFixed(2)}  $groupCurrency');
       debtors[i] = MapEntry(debtors[i].key, debtors[i].value - amount);
       creditors[j] = MapEntry(creditors[j].key, creditors[j].value - amount);
       if (debtors[i].value <= 0.01) i++;
@@ -2140,7 +2171,7 @@ void showEditExpenseDialog(
             return ListTile(
               leading: CircleAvatar(backgroundColor: colors[i % colors.length]),
               title: Text(displayNameForEmail(entry.key, emailToName)),
-              trailing: Text('${entry.value.toStringAsFixed(2)} TL'),
+              trailing: Text('${entry.value.toStringAsFixed(2)} ${widget.groupCurrency}'),
             );
           }),
         ],
@@ -2191,8 +2222,10 @@ void showEditExpenseDialog(
                 amount: (data['amount'] ?? 0).toDouble(),
                 createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
                 currency: (data['currency'] ?? 'TRY').toString(),
-                paidBy: (data['paidBy'] ?? '').toString(),
-                participants: List<String>.from(data['participants'] ?? []),
+                paidBy: (data['paidByEmail'] ?? data['paidBy'] ?? '').toString().trim().toLowerCase(),
+                participants: List<String>.from(data['participants'] ?? [])
+                .map((e) => e.toString().trim().toLowerCase())
+                .toList(),
                 splitType: (data['splitType'] ?? 'equal').toString(),
                 shares: Map<String, double>.from(
                   (data['shares'] ?? {}).map(
@@ -2247,7 +2280,7 @@ void showEditExpenseDialog(
                     memberEmails.isEmpty ? 0 : totalAmount / memberEmails.length;
                 final rawBalances = calculateBalanceFromExpenses(firebaseExpenses, memberEmails);
                 final balances = applyPaymentsToBalance(rawBalances, payments);
-                final debts = calculateDebtsFromBalance(balances);
+                final debts = calculateDebtsFromBalance(balances, groupCurrency);
 
                 return DefaultTabController(
                   length: 5,
@@ -2362,7 +2395,7 @@ void showEditExpenseDialog(
                             children: [
                               _buildExpensesTab(firebaseExpenses, memberEmails, emailToName),
                               _buildMembersTab(memberEmails, emailToName, emailToDocId),
-                              _buildDebtsTab(memberEmails, emailToName, balances, debts),
+                              _buildDebtsTab(memberEmails, emailToName, balances, debts, groupCurrency),
                               _buildChartTab(firebaseExpenses, emailToName),
                               _buildPaymentsHistoryTab(payments, emailToName),
                             ],
@@ -2559,11 +2592,12 @@ void showEditExpenseDialog(
   }
 
   Widget _buildDebtsTab(
-    List<String> memberEmails,
-    Map<String, String> emailToName,
-    Map<String, double> balances,
-    List<String> debts,
-  ) {
+  List<String> memberEmails,
+  Map<String, String> emailToName,
+  Map<String, double> balances,
+  List<String> debts,
+  String groupCurrency,
+) {
     return ListView(
       children: [
         const ListTile(title: Text('Borç / Alacak Durumu')),
@@ -2574,10 +2608,10 @@ void showEditExpenseDialog(
           String text;
           if (value > 0) {
             color = Colors.green;
-            text = '${value.toStringAsFixed(2)} TL alacaklı';
+            text = '${value.toStringAsFixed(2)} ${widget.groupCurrency} alacaklı';
           } else if (value < 0) {
             color = Colors.red;
-            text = '${(-value).toStringAsFixed(2)} TL borçlu';
+            text = '${(-value).toStringAsFixed(2)} ${widget.groupCurrency} borçlu';
           } else {
             color = Colors.grey;
             text = 'Borcu yok';
@@ -2631,7 +2665,7 @@ void showEditExpenseDialog(
                         final fromEmail = parts[0].trim().toLowerCase();
                         final rightPart = parts[1].trim();
                         final toEmail = rightPart.split(':')[0].trim().toLowerCase();
-                        final amountText = rightPart.split(':')[1].replaceAll('TL', '').trim();
+                        final amountText = rightPart.split(':')[1].replaceAll('$groupCurrency', '').trim();
                         final amount = double.tryParse(amountText.replaceAll(',', '.'));
                         if (amount == null) return;
                         await markDebtAsPaid(fromEmail: fromEmail, toEmail: toEmail, amount: amount);
@@ -2669,7 +2703,7 @@ void showEditExpenseDialog(
             title: Text('$fromName → $toName'),
             subtitle: const Text('Ödeme kaydedildi'),
             trailing: Text(
-              '${payment.amount.toStringAsFixed(2)} TL',
+              '${payment.amount.toStringAsFixed(2)} ${widget.groupCurrency}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
@@ -2692,27 +2726,126 @@ class _LoginPageState extends State<LoginPage> {
   String password = '';
 
   Future<void> login() async {
-    try {
-      final cleanEmail = email.trim().toLowerCase();
-      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: cleanEmail,
-        password: password.trim(),
-      );
+  try {
+    final cleanEmail = email.trim().toLowerCase();
 
-      final user = credential.user;
-      await FirebaseFirestore.instance.collection('users').doc(user?.uid).set({
-        'email': cleanEmail,
-      }, SetOptions(merge: true));
+    final userQuery = await FirebaseFirestore.instance
+        .collection('users')
+        .where('email', isEqualTo: cleanEmail)
+        .limit(1)
+        .get();
 
-      await saveFcmToken();
-    } catch (e) {
+    if (userQuery.docs.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $e')),
-      );
-    }
-  }
 
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Bu e-posta kayıtlı değil. Lütfen kayıt olun."),
+        ),
+      );
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const RegisterPage(),
+        ),
+      );
+      return;
+    }
+
+    final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+      email: cleanEmail,
+      password: password.trim(),
+    );
+
+    final user = credential.user;
+
+    await FirebaseFirestore.instance.collection('users').doc(user?.uid).set({
+      'email': cleanEmail,
+    }, SetOptions(merge: true));
+
+    await saveFcmToken();
+  } on FirebaseAuthException catch (e) {
+    if (!mounted) return;
+
+    if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("E-posta veya şifre hatalı.")),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Giriş yapılamadı: ${e.message}")),
+    );
+  } catch (e) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Hata: $e')),
+    );
+  }
+}
+Future<void> showForgotPasswordDialog() async {
+  String resetEmail = email;
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text("Şifre Sıfırla"),
+        content: TextField(
+          controller: TextEditingController(text: resetEmail),
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            hintText: "E-posta adresi",
+          ),
+          onChanged: (value) {
+            resetEmail = value.trim().toLowerCase();
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("İptal"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await FirebaseAuth.instance.sendPasswordResetEmail(
+                  email: resetEmail,
+                );
+
+                if (!mounted) return;
+
+                Navigator.pop(context);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      "Şifre sıfırlama bağlantısı gönderildi.",
+                    ),
+                  ),
+                );
+              } on FirebaseAuthException catch (e) {
+                if (!mounted) return;
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      e.message ?? "Şifre sıfırlama başarısız.",
+                    ),
+                  ),
+                );
+              }
+            },
+            child: const Text("Gönder"),
+          ),
+        ],
+      );
+    },
+  );
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2736,6 +2869,10 @@ class _LoginPageState extends State<LoginPage> {
               child: const Text('Giriş Yap'),
             ),
             TextButton(
+              onPressed: showForgotPasswordDialog,
+              child: const Text("Şifremi Unuttum"),
+            ),
+            TextButton(
               onPressed: () {
                 Navigator.push(
                   context,
@@ -2743,7 +2880,8 @@ class _LoginPageState extends State<LoginPage> {
                 );
               },
               child: const Text('Kayıt Ol'),
-            ),
+            )
+            
           ],
         ),
       ),
