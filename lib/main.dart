@@ -2311,10 +2311,33 @@ void showEditExpenseDialog(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          const Text('Kim Ne Kadar Ödedi', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Column(
+              children: const [
+                Text(
+                  "Kim Ne Kadar Ödedi",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  "Toplam harcamaya göre ödeme dağılımı",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
           const SizedBox(height: 20),
           Expanded(
-            child: PieChart(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                PieChart(
               PieChartData(
                 sections: List<PieChartSectionData>.generate(entries.length, (i) {
                   final entry = entries[i];
@@ -2328,15 +2351,105 @@ void showEditExpenseDialog(
                   );
                 }),
               ),
-            ),
-          ),
+                    ),
+
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.pie_chart,
+                            color: Colors.deepPurple,
+                            size: 28,
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            "Toplam",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            "${grandTotal.toStringAsFixed(2)} ${expenses.first.currency}",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                        
           const SizedBox(height: 20),
           ...List.generate(entries.length, (i) {
             final entry = entries[i];
-            return ListTile(
-              leading: CircleAvatar(backgroundColor: colors[i % colors.length]),
-              title: Text(displayNameForEmail(entry.key, emailToName)),
-              trailing: Text('${entry.value.toStringAsFixed(2)} ${widget.groupCurrency}'),
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+
+              child: Row(
+                children: [
+
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: colors[i % colors.length],
+                    child: Text(
+                      displayNameForEmail(entry.key, emailToName)
+                        .substring(0, 1).toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  Expanded(
+                    child: Text(
+                        displayNameForEmail(entry.key, emailToName),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors[i % colors.length].withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Text(
+                      "${entry.value.toStringAsFixed(2)} ${expenses.first.currency}",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: colors[i % colors.length],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             );
           }),
         ],
