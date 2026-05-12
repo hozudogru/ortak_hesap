@@ -48,6 +48,7 @@ class Expense {
   final String paidBy;
   final List<String> participants;
   final String splitType;
+  final String category;
   final Map<String, double> shares;
   
 
@@ -60,6 +61,7 @@ class Expense {
     this.createdAt,
     required this.participants,
     required this.splitType,
+    required this.category,
     required this.shares,
     
   });
@@ -895,6 +897,24 @@ class GroupDetailPage extends StatefulWidget {
 }
 
 class _GroupDetailPageState extends State<GroupDetailPage> {
+  IconData categoryIcon(String category) {
+  switch (category) {
+    case 'food':
+      return Icons.restaurant;
+
+    case 'transport':
+      return Icons.local_taxi;
+
+    case 'hotel':
+      return Icons.hotel;
+
+    case 'market':
+      return Icons.shopping_cart;
+
+    default:
+      return Icons.receipt_long;
+  }
+}
   String nameForPdf(
   String email,
   Map<String, String> emailToName,
@@ -1551,6 +1571,7 @@ pw.Widget _pdfTableCell(
       'paidByEmail': payerEmail,
       'participants': expense.participants.map((e) => e.trim().toLowerCase()).toList(),
       'splitType': expense.splitType,
+      'category': expense.category,
       'shares': expense.shares,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -1609,6 +1630,7 @@ pw.Widget _pdfTableCell(
   String title = '';
   String amount = '';
   String splitType = "equal";
+  String selectedCategory = "general";
 
   final titleController = TextEditingController();
   final amountController = TextEditingController();
@@ -1718,7 +1740,46 @@ pw.Widget _pdfTableCell(
                       }
                     },
                   ),
+                  const SizedBox(height: 12),
 
+                  DropdownButtonFormField<String>(
+                    value: selectedCategory,
+                    decoration: InputDecoration(
+                      labelText: "Kategori",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: "general",
+                        child: Text("Genel"),
+                      ),
+                      DropdownMenuItem(
+                        value: "food",
+                        child: Text("Yemek"),
+                      ),
+                      DropdownMenuItem(
+                        value: "transport",
+                        child: Text("Ulaşım"),
+                      ),
+                      DropdownMenuItem(
+                        value: "hotel",
+                        child: Text("Konaklama"),
+                      ),
+                      DropdownMenuItem(
+                        value: "market",
+                        child: Text("Market"),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          selectedCategory = value;
+                        });
+                      }
+                    },
+                  ),
                   const SizedBox(height: 16),
 
                   const Text(
@@ -1880,6 +1941,7 @@ pw.Widget _pdfTableCell(
                                 paidBy: selectedPaidBy,
                                 participants: selectedParticipants,
                                 splitType: splitType,
+                                category: selectedCategory,
                                 shares: splitType == "custom"
                                     ? customShares
                                     : {},
@@ -2114,6 +2176,7 @@ void showEditExpenseDialog(
                         title: title.trim(),
                         amount: parsedAmount,
                         splitType: splitType,
+                        category: 'general',
                         shares: splitType == "custom" ? customShares : {},
                         currency: expense.currency,
                         paidBy: expense.paidBy,
@@ -2329,6 +2392,7 @@ void showEditExpenseDialog(
                 .map((e) => e.toString().trim().toLowerCase())
                 .toList(),
                 splitType: (data['splitType'] ?? 'equal').toString(),
+                category: data['category'] ?? 'general',
                 shares: Map<String, double>.from(
                   (data['shares'] ?? {}).map(
                     (key, value) => MapEntry(
@@ -2388,7 +2452,11 @@ void showEditExpenseDialog(
                   length: 5,
                   child: Scaffold(
                     appBar: AppBar(
-                      title: Text(widget.groupName),
+                      toolbarHeight: 82,
+                      title: Padding(
+                          padding: const EdgeInsets.only(top: 18),
+                          child: Text(widget.groupName),
+                        ),
                       
                       actions: [
                         IconButton(
@@ -2550,123 +2618,204 @@ void showEditExpenseDialog(
   }
 
   Widget _buildExpensesTab(
-    List<Expense> firebaseExpenses,
-    List<String> memberEmails,
-    Map<String, String> emailToName,
-  ) {
-    if (firebaseExpenses.isEmpty) return const Center(child: Text('Henüz harcama yok 💸'));
+  List<Expense> firebaseExpenses,
+  List<String> memberEmails,
+  Map<String, String> emailToName,
+) {
+  if (firebaseExpenses.isEmpty) {
+    return const Center(child: Text('Henüz harcama yok 💸'));
+  }
 
-    return ListView(
-      children: firebaseExpenses.map((expense) {
-        final payerName = displayNameForEmail(expense.paidBy, emailToName);
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ListTile(
-            leading: const Icon(Icons.payments, color: Colors.teal),
-            title: Text(expense.title),
-            subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Ödeyen: $payerName'),
+  return ListView(
+    children: firebaseExpenses.map((expense) {
+      final payerName = displayNameForEmail(expense.paidBy, emailToName);
 
-                  const SizedBox(height: 4),
-
-                  Text(
-                    'Katılanlar: ${expense.participants.map((email) => displayNameForEmail(email, emailToName)).join(", ")}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12),
+      return Card(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: ListTile(
+          leading: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.teal.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+                categoryIcon(expense.category),
+                color: Colors.teal,
+              ),
+          ),
+          title: Text(
+            expense.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Ödeyen: $payerName'),
+              const SizedBox(height: 4),
+              Text(
+                'Katılanlar: ${expense.participants.map((email) => displayNameForEmail(email, emailToName)).join(", ")}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 2),
+              Row(
+                    children: [
+                      const Icon(
+                        Icons.people_outline,
+                        size: 14,
+                        color: Colors.grey,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        expense.splitType == "custom"
+                            ? "Kişiye Göre"
+                            : "Eşit Böl",
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
                   ),
-
-                  const SizedBox(height: 2),
-
-                  Text(
-                    expense.splitType == "custom"
-                        ? "Bölüşüm: Kişiye Göre"
-                        : "Bölüşüm: Eşit Böl",
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 2),
-
-                  Text(
-                    expense.createdAt != null
-                        ? "Tarih: ${expense.createdAt!.day.toString().padLeft(2, '0')}.${expense.createdAt!.month.toString().padLeft(2, '0')}.${expense.createdAt!.year} "
-                          "${expense.createdAt!.hour.toString().padLeft(2, '0')}:${expense.createdAt!.minute.toString().padLeft(2, '0')}"
-                        : "Tarih yok",
-                    style: const TextStyle(
-                      fontSize: 11,
+              const SizedBox(height: 2),
+              Row(
+                  children: [
+                    const Icon(
+                      Icons.schedule,
+                      size: 14,
                       color: Colors.grey,
                     ),
-                  ),
-                ],
-              ),
-            trailing: Text('${expense.amount.toStringAsFixed(2)} ${expense.currency}', style: const TextStyle(fontWeight: FontWeight.bold)
-            ),
-            onTap: () {
-              showEditExpenseDialog(
-                expense,
-                memberEmails,
-                emailToName,
-              );
-            },
-            onLongPress: () {
-              showModalBottomSheet(
-                context: context,
-                builder: (context) {
-                  return SafeArea(
-                    child: Wrap(
-                      children: [
-                        ListTile(
-                          leading: const Icon(Icons.edit),
-                          title: const Text('Düzenle'),
-                          onTap: () {
-                            Navigator.pop(context);
-                            showEditExpenseDialog(expense, memberEmails, emailToName);
-                          },
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        expense.createdAt != null
+                            ? "${expense.createdAt!.day.toString().padLeft(2, '0')}.${expense.createdAt!.month.toString().padLeft(2, '0')}.${expense.createdAt!.year} "
+                                "${expense.createdAt!.hour.toString().padLeft(2, '0')}:${expense.createdAt!.minute.toString().padLeft(2, '0')}"
+                            : "Tarih yok",
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey,
                         ),
-                        ListTile(
-                          leading: const Icon(Icons.delete, color: Colors.red),
-                          title: const Text('Sil'),
-                          onTap: () {
-                            Navigator.pop(context);
-                            showDialog(
-                              context: context,
-                              builder: (context) {
-                                return AlertDialog(
-                                  title: const Text('Harcamayı Sil'),
-                                  content: Text('${expense.title} silinsin mi?'),
-                                  actions: [
-                                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('İptal')),
-                                    ElevatedButton(
-                                      onPressed: () async {
-                                        await deleteExpenseFromFirebase(expense.id);
-                                        if (context.mounted) Navigator.pop(context);
-                                      },
-                                      child: const Text('Sil'),
-                                    ),
-                                  ],
-                                );
-                              },
-                            );
-                          },
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.close),
-                          title: const Text('İptal'),
-                          onTap: () => Navigator.pop(context),
-                        ),
-                      ],
+                      ),
                     ),
-                  );
-                },
-              );
-            },
+                  ],
+                ),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: expense.splitType == "custom"
+                      ? Colors.orange.withOpacity(0.12)
+                      : Colors.green.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  expense.splitType == "custom" ? "Kişiye Göre" : "Eşit Böl",
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: expense.splitType == "custom"
+                        ? Colors.orange
+                        : Colors.green,
+                  ),
+                ),
+              ),
+            ],
           ),
-        );
-      }).toList(),
-    );
-  }
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.teal.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(
+              '${expense.amount.toStringAsFixed(2)} ${expense.currency}',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: Colors.teal,
+              ),
+            ),
+          ),
+          onTap: () {
+            showEditExpenseDialog(expense, memberEmails, emailToName);
+          },
+          onLongPress: () {
+            showModalBottomSheet(
+              context: context,
+              builder: (context) {
+                return SafeArea(
+                  child: Wrap(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.edit),
+                        title: const Text('Düzenle'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          showEditExpenseDialog(
+                            expense,
+                            memberEmails,
+                            emailToName,
+                          );
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.delete, color: Colors.red),
+                        title: const Text('Sil'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          showDialog(
+                            context: context,
+                            builder: (context) {
+                              return AlertDialog(
+                                title: const Text('Harcamayı Sil'),
+                                content: Text('${expense.title} silinsin mi?'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('İptal'),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () async {
+                                      await deleteExpenseFromFirebase(
+                                        expense.id,
+                                      );
+                                      if (context.mounted) {
+                                        Navigator.pop(context);
+                                      }
+                                    },
+                                    child: const Text('Sil'),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.close),
+                        title: const Text('İptal'),
+                        onTap: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      );
+    }).toList(),
+  );
+}
 
   Widget _buildMembersTab(
     List<String> memberEmails,
