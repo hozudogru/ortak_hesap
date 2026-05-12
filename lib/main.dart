@@ -1591,212 +1591,319 @@ pw.Widget _pdfTableCell(
   }
 
   void showAddExpenseDialog(List<String> memberEmails) async {
-    final groupDoc = await FirebaseFirestore.instance
-    .collection('groups')
-    .doc(widget.groupName)
-    .get();
+  final groupDoc = await FirebaseFirestore.instance
+      .collection('groups')
+      .doc(widget.groupName)
+      .get();
 
-final groupCurrency =
-    (groupDoc.data()?['currency'] ?? 'TRY').toString();
-    if (memberEmails.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Önce üye eklemelisin')),
-      );
-      return;
-    }
+  final groupCurrency =
+      (groupDoc.data()?['currency'] ?? 'TRY').toString();
 
-    String title = '';
-    String amount = '';
-    String splitType = "equal";
-    final Map<String, TextEditingController> shareControllers = {};
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final selectedPaidBy = currentUser?.email?.trim().toLowerCase() ?? '';
-    final List<String> selectedParticipants = List.from(memberEmails);
+  if (memberEmails.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Önce üye eklemelisin')),
+    );
+    return;
+  }
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Harcama Ekle'),
-              content: SingleChildScrollView(
-  child: Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      TextField(
-        controller: TextEditingController(text: title),
-        onChanged: (value) => title = value,
-        decoration: const InputDecoration(hintText: 'Harcama adı'),
+  String title = '';
+  String amount = '';
+  String splitType = "equal";
+
+  final titleController = TextEditingController();
+  final amountController = TextEditingController();
+
+  final Map<String, TextEditingController> shareControllers = {};
+  final currentUser = FirebaseAuth.instance.currentUser;
+  final selectedPaidBy = currentUser?.email?.trim().toLowerCase() ?? '';
+  final List<String> selectedParticipants = List.from(memberEmails);
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(24),
       ),
-      
-TextField(
-        controller: TextEditingController(text: amount),
-        keyboardType: TextInputType.number,
-        onChanged: (value) => amount = value,
-        decoration: const InputDecoration(hintText: 'Tutar'),
-      ),
-      
-      const SizedBox(height: 12),
-
-      DropdownButtonFormField<String>(
-        value: splitType,
-        decoration: const InputDecoration(
-          labelText: "Bölüşüm Tipi",
-          border: OutlineInputBorder(),
-        ),
-        items: const [
-          DropdownMenuItem(
-            value: "equal",
-            child: Text("Eşit Böl"),
-          ),
-          DropdownMenuItem(
-            value: "custom",
-            child: Text("Kişiye Göre Tutar"),
-          ),
-        ],
-        onChanged: (value) {
-          if (value != null) {
-            setDialogState(() {
-              splitType = value;
-            });
-          }
-        },
-      ),
-      const SizedBox(height: 16),
-          const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Kimler katıldı?',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+    ),
+    builder: (bottomSheetContext) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 16,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 20,
             ),
-      const SizedBox(height: 12),
-              ...memberEmails.map((email) {
-                final name = email.split("@").first;
-
-                return CheckboxListTile(
-                  value: selectedParticipants.contains(email),
-                  title: Text(name),
-                  onChanged: (checked) {
-                    setDialogState(() {
-                      if (checked == true) {
-                        if (!selectedParticipants.contains(email)) {
-                          selectedParticipants.add(email);
-                        }
-
-                        shareControllers.putIfAbsent(
-                          email,
-                          () => TextEditingController(
-                            text: "",
-                          ),
-                        );
-                      } else {
-                        selectedParticipants.remove(email);
-                      }
-                    });
-                  },
-                );
-              }).toList(),
-
-              if (splitType == "custom") ...[
-                const SizedBox(height: 12),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    "Kişi Payları",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                ...selectedParticipants.map((email) {
-                  shareControllers.putIfAbsent(
-                    email,
-                    () => TextEditingController(text: ""),
-                    
-                  );
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: TextField(
-                      controller: shareControllers[email],
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: "${email.split("@").first} payı",
-                        border: const OutlineInputBorder(),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade400,
+                        borderRadius: BorderRadius.circular(20),
                       ),
                     ),
-                  );
-                }).toList(),
-              ],
-            ],
-          ),
-        ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('İptal')),
-                ElevatedButton(
-                  onPressed: () async {
-                    final parsedAmount = double.tryParse(amount.replaceAll(',', '.'));
-                    if (title.trim().isNotEmpty && parsedAmount != null && selectedParticipants.isNotEmpty) {
-                      final Map<String, double> customShares = {};
+                  ),
 
-                      if (splitType == "custom") {
-                        double totalShares = 0;
+                  const SizedBox(height: 18),
 
-                        for (final email in selectedParticipants) {
-                          final text = shareControllers[email]?.text ?? "0";
-                          final value = double.tryParse(text.replaceAll(",", ".")) ?? 0;
+                  const Text(
+                    'Harcama Ekle',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
 
-                          if (value <= 0) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text("${email.split("@").first} için tutar gir"),
-                              ),
-                            );
-                            return;
-                          }
+                  const SizedBox(height: 18),
 
-                          customShares[email] = value;
-                          totalShares += value;
-                        }
+                  TextField(
+                    controller: titleController,
+                    onChanged: (value) => title = value,
+                    decoration: InputDecoration(
+                      labelText: 'Harcama adı',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
 
-                        if ((totalShares - parsedAmount).abs() > 0.01) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                "Kişi payları toplamı harcama tutarına eşit olmalı. Toplam: ${totalShares.toStringAsFixed(2)}",
-                              ),
-                            ),
-                          );
-                          return;
-                        }
+                  const SizedBox(height: 12),
+
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    onChanged: (value) => amount = value,
+                    decoration: InputDecoration(
+                      labelText: 'Tutar ($groupCurrency)',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  DropdownButtonFormField<String>(
+                    value: splitType,
+                    decoration: InputDecoration(
+                      labelText: "Bölüşüm Tipi",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: "equal",
+                        child: Text("Eşit Böl"),
+                      ),
+                      DropdownMenuItem(
+                        value: "custom",
+                        child: Text("Kişiye Göre Tutar"),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          splitType = value;
+                        });
                       }
+                    },
+                  ),
 
-                      await saveExpenseToFirebase(
-                        Expense(
-                          id: '',
-                          title: title.trim(),
-                          amount: parsedAmount,
-                          currency: groupCurrency,
-                          paidBy: selectedPaidBy,
-                          participants: selectedParticipants,
-                          splitType: splitType,
-                          shares: splitType == "custom" ? customShares : {},
+                  const SizedBox(height: 16),
+
+                  const Text(
+                    'Kimler katıldı?',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  ...memberEmails.map((email) {
+                    final name = email.split("@").first;
+
+                    return CheckboxListTile(
+                      dense: true,
+                      visualDensity: const VisualDensity(vertical: -3),
+                      contentPadding: EdgeInsets.zero,
+                      value: selectedParticipants.contains(email),
+                      title: Text(name),
+                     
+                      onChanged: (checked) {
+                        setDialogState(() {
+                          if (checked == true) {
+                            if (!selectedParticipants.contains(email)) {
+                              selectedParticipants.add(email);
+                            }
+
+                            shareControllers.putIfAbsent(
+                              email,
+                              () => TextEditingController(text: ""),
+                            );
+                          } else {
+                            selectedParticipants.remove(email);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+
+                  if (splitType == "custom") ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      "Kişi Payları",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    ...selectedParticipants.map((email) {
+                      shareControllers.putIfAbsent(
+                        email,
+                        () => TextEditingController(text: ""),
+                      );
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: TextField(
+                          controller: shareControllers[email],
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: "${email.split("@").first} payı",
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
                         ),
                       );
-                    }
-                    if (context.mounted) Navigator.pop(context);
-                  },
-                  child: const Text('Ekle'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
+                    }).toList(),
+                  ],
+
+                  const SizedBox(height: 16),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(bottomSheetContext),
+                          child: const Text('İptal'),
+                        ),
+                      ),
+
+                      const SizedBox(width: 12),
+
+                      Expanded(
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          onPressed: () async {
+                            final parsedAmount = double.tryParse(
+                              amount.replaceAll(',', '.'),
+                            );
+
+                            if (title.trim().isEmpty ||
+                                parsedAmount == null ||
+                                selectedParticipants.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Harcama adı, tutar ve katılımcılar zorunlu.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+
+                            final Map<String, double> customShares = {};
+
+                            if (splitType == "custom") {
+                              double totalShares = 0;
+
+                              for (final email in selectedParticipants) {
+                                final text =
+                                    shareControllers[email]?.text ?? "0";
+
+                                final value = double.tryParse(
+                                      text.replaceAll(",", "."),
+                                    ) ??
+                                    0;
+
+                                if (value <= 0) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        "${email.split("@").first} için tutar gir",
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                customShares[email] = value;
+                                totalShares += value;
+                              }
+
+                              if ((totalShares - parsedAmount).abs() > 0.01) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      "Kişi payları toplamı harcama tutarına eşit olmalı. Toplam: ${totalShares.toStringAsFixed(2)}",
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                            }
+
+                            await saveExpenseToFirebase(
+                              Expense(
+                                id: '',
+                                title: title.trim(),
+                                amount: parsedAmount,
+                                currency: groupCurrency,
+                                paidBy: selectedPaidBy,
+                                participants: selectedParticipants,
+                                splitType: splitType,
+                                shares: splitType == "custom"
+                                    ? customShares
+                                    : {},
+                              ),
+                            );
+
+                            if (context.mounted) {
+                              Navigator.pop(bottomSheetContext);
+                            }
+                          },
+                          child: const Text('Ekle'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
 
 void showEditExpenseDialog(
   Expense expense,
@@ -1891,12 +1998,9 @@ void showEditExpenseDialog(
                     final name = displayNameForEmail(email, emailToName);
 
                     return CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
                       value: selectedParticipants.contains(email),
                       title: Text(name),
-                      subtitle: Text(
-                        email,
-                        style: const TextStyle(fontSize: 12),
-                      ),
                       onChanged: (checked) {
                         setDialogState(() {
                           if (checked == true) {
@@ -1906,9 +2010,7 @@ void showEditExpenseDialog(
 
                             shareControllers.putIfAbsent(
                               email,
-                              () => TextEditingController(
-                                text: expense.shares[email]?.toStringAsFixed(2) ?? "",
-                              ),
+                              () => TextEditingController(text: ""),
                             );
                           } else {
                             selectedParticipants.remove(email);
