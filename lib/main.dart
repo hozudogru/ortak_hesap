@@ -2312,41 +2312,41 @@ void showEditExpenseDialog(
                         ),
                       ],
                      bottom: const TabBar(
-  indicatorColor: Colors.white,
-  labelColor: Colors.white,
-  unselectedLabelColor: Colors.white70,
-  labelStyle: TextStyle(
-    fontSize: 10,
-    fontWeight: FontWeight.w600,
-  ),
-  unselectedLabelStyle: TextStyle(
-    fontSize: 9,
-    fontWeight: FontWeight.w500,
-  ),
-  indicatorSize: TabBarIndicatorSize.tab,
-  tabs: [
-    Tab(
-      icon: Icon(Icons.payments, size: 19),
-      text: 'Gider',
-    ),
-    Tab(
-      icon: Icon(Icons.people, size: 19),
-      text: 'Üyeler',
-    ),
-    Tab(
-      icon: Icon(Icons.account_balance, size: 19),
-      text: 'Borç',
-    ),
-    Tab(
-      icon: Icon(Icons.pie_chart, size: 19),
-      text: 'Grafik',
-    ),
-    Tab(
-      icon: Icon(Icons.history, size: 19),
-      text: 'Geçmiş',
-    ),
-  ],
-),
+                        indicatorColor: Colors.white,
+                        labelColor: Colors.white,
+                        unselectedLabelColor: Colors.white70,
+                        labelStyle: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        unselectedLabelStyle: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        indicatorSize: TabBarIndicatorSize.tab,
+                        tabs: [
+                          Tab(
+                            icon: Icon(Icons.payments, size: 19),
+                            text: 'Gider',
+                          ),
+                          Tab(
+                            icon: Icon(Icons.people, size: 19),
+                            text: 'Üyeler',
+                          ),
+                          Tab(
+                            icon: Icon(Icons.account_balance, size: 19),
+                            text: 'Borç',
+                          ),
+                          Tab(
+                            icon: Icon(Icons.pie_chart, size: 19),
+                            text: 'Grafik',
+                          ),
+                          Tab(
+                            icon: Icon(Icons.history, size: 19),
+                            text: 'Geçmiş',
+                          ),
+                        ],
+                      ),
                     ),
                     body: Column(
                       children: [
@@ -2358,32 +2358,59 @@ void showEditExpenseDialog(
                             child: Padding(
                               padding: const EdgeInsets.all(16),
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text('Toplam Harcama', style: TextStyle(color: Colors.grey)),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        "${totalAmount.toStringAsFixed(2)} $groupCurrency",
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          "Toplam Harcama",
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(color: Colors.grey),
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(height: 6),
+                                        FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(
+                                            "${totalAmount.toStringAsFixed(2)} $groupCurrency",
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      const Text('Kişi Başı', style: TextStyle(color: Colors.grey)),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${perPersonAmount.toStringAsFixed(2)} $groupCurrency',
-                                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
+
+                                  const SizedBox(width: 12),
+
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        const Text(
+                                          "Kişi Başı",
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(color: Colors.grey),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.centerRight,
+                                          child: Text(
+                                            "${perPersonAmount.toStringAsFixed(2)} $groupCurrency",
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
@@ -2391,7 +2418,9 @@ void showEditExpenseDialog(
                           ),
                         ),
                         Expanded(
-                          child: TabBarView(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: TabBarView(
                             children: [
                               _buildExpensesTab(firebaseExpenses, memberEmails, emailToName),
                               _buildMembersTab(memberEmails, emailToName, emailToDocId),
@@ -2399,6 +2428,7 @@ void showEditExpenseDialog(
                               _buildChartTab(firebaseExpenses, emailToName),
                               _buildPaymentsHistoryTab(payments, emailToName),
                             ],
+                          ),
                           ),
                         ),
                       ],
