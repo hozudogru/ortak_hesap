@@ -14,6 +14,7 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
+import 'dart:io';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,18 +25,32 @@ void main() async {
 }
 
 Future<void> saveFcmToken() async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-  final messaging = FirebaseMessaging.instance;
-  await messaging.requestPermission();
-  final token = await messaging.getToken();
+    final messaging = FirebaseMessaging.instance;
 
-  if (token != null) {
+    if (Platform.isIOS) {
+      await messaging.requestPermission();
+
+      final apnsToken = await messaging.getAPNSToken();
+
+      if (apnsToken == null) {
+        debugPrint("APNS token henüz hazır değil. FCM token kaydı atlandı.");
+        return;
+      }
+    }
+
+    final token = await messaging.getToken();
+
+    if (token == null) return;
+
     await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-      'email': user.email?.trim().toLowerCase(),
       'fcmToken': token,
     }, SetOptions(merge: true));
+  } catch (e) {
+    debugPrint("FCM token hatası: $e");
   }
 }
 
