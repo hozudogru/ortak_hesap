@@ -23,16 +23,20 @@ workflows:
 
       - name: Install CocoaPods
         script: |
+          cd ios
           rm -rf Pods Podfile.lock
           pod repo update
           pod install
-          cd ..
 
       - name: Set up code signing
         script: |
           keychain initialize
           keychain add-certificates
           xcode-project use-profiles
+
+      - name: Flutter build iOS
+        script: |
+          flutter build ios --release --no-codesign
 
       - name: Build signed IPA
         script: |
@@ -43,8 +47,8 @@ workflows:
     artifacts:
       - /tmp/xcodebuild_logs/*.log
       - build/ios/ipa/*.ipa
-    
+
     publishing:
-        app_store_connect:
-            auth: integration
-            submit_to_testflight: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
