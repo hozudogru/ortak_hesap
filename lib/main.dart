@@ -3142,33 +3142,9 @@ class _LoginPageState extends State<LoginPage> {
   String email = '';
   String password = '';
 
-  Future<void> login() async {
+Future<void> login() async {
   try {
     final cleanEmail = email.trim().toLowerCase();
-
-    final userQuery = await FirebaseFirestore.instance
-        .collection('users')
-        .where('email', isEqualTo: cleanEmail)
-        .limit(1)
-        .get();
-
-    if (userQuery.docs.isEmpty) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Bu e-posta kayıtlı değil. Lütfen kayıt olun."),
-        ),
-      );
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const RegisterPage(),
-        ),
-      );
-      return;
-    }
 
     final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
       email: cleanEmail,
@@ -3185,6 +3161,18 @@ class _LoginPageState extends State<LoginPage> {
   } on FirebaseAuthException catch (e) {
     if (!mounted) return;
 
+    if (e.code == 'user-not-found') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Bu e-posta kayıtlı değil. Lütfen kayıt olun.")),
+      );
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const RegisterPage()),
+      );
+      return;
+    }
+
     if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("E-posta veya şifre hatalı.")),
@@ -3197,7 +3185,6 @@ class _LoginPageState extends State<LoginPage> {
     );
   } catch (e) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Hata: $e')),
     );
