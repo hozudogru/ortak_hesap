@@ -920,6 +920,70 @@ class GroupDetailPage extends StatefulWidget {
 }
 
 class _GroupDetailPageState extends State<GroupDetailPage> {
+  Future<void> addAnonymousMemberToFirebase(String name) async {
+  final cleanName = name.trim();
+
+  if (cleanName.isEmpty) return;
+
+  final anonymousId =
+      "anonymous_${cleanName.toLowerCase().replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}";
+
+  final currentUserEmail =
+      FirebaseAuth.instance.currentUser?.email?.trim().toLowerCase() ?? '';
+
+  await FirebaseFirestore.instance
+      .collection('groups')
+      .doc(widget.groupName)
+      .collection('members')
+      .add({
+    'name': cleanName,
+    'nickname': cleanName,
+    'email': anonymousId,
+    'isAnonymous': true,
+    'createdBy': currentUserEmail,
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+}
+void showAddAnonymousMemberDialog() {
+  String name = '';
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Anonim Üye Ekle'),
+        content: TextField(
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Üye adı',
+            hintText: 'Örn: Ali',
+          ),
+          onChanged: (value) {
+            name = value;
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (name.trim().isEmpty) return;
+
+              await addAnonymousMemberToFirebase(name);
+
+              if (context.mounted) {
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Ekle'),
+          ),
+        ],
+      );
+    },
+  );
+}
   IconData categoryIcon(String category) {
   switch (category) {
     case 'food':
@@ -1754,6 +1818,10 @@ pw.Widget _pdfTableCell(
                         value: "custom",
                         child: Text("Kişiye Göre Tutar"),
                       ),
+                      DropdownMenuItem(
+                        value: "weighted",
+                        child: Text("Paya Göre"),
+                      ),
                     ],
                     onChanged: (value) {
                       if (value != null) {
@@ -1843,11 +1911,11 @@ pw.Widget _pdfTableCell(
                     );
                   }).toList(),
 
-                  if (splitType == "custom") ...[
+                  if (splitType == "custom" || splitType == "weighted") ...[
                     const SizedBox(height: 12),
-                    const Text(
-                      "Kişi Payları",
-                      style: TextStyle(
+                    Text(
+                      splitType == "weighted" ? "Kişi Payları / Katsayıları" : "Kişi Payları",
+                      style: const TextStyle(
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1890,12 +1958,6 @@ pw.Widget _pdfTableCell(
 
                       Expanded(
                         child: FilledButton(
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
                           onPressed: () async {
                             final parsedAmount = double.tryParse(
                               amount.replaceAll(',', '.'),
@@ -1906,9 +1968,7 @@ pw.Widget _pdfTableCell(
                                 selectedParticipants.isEmpty) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text(
-                                    'Harcama adı, tutar ve katılımcılar zorunlu.',
-                                  ),
+                                  content: Text('Harcama adı, tutar ve katılımcılar zorunlu.'),
                                 ),
                               );
                               return;
@@ -1916,24 +1976,17 @@ pw.Widget _pdfTableCell(
 
                             final Map<String, double> customShares = {};
 
-                            if (splitType == "custom") {
+                            if (splitType == "custom" || splitType == "weighted") {
                               double totalShares = 0;
 
                               for (final email in selectedParticipants) {
-                                final text =
-                                    shareControllers[email]?.text ?? "0";
-
-                                final value = double.tryParse(
-                                      text.replaceAll(",", "."),
-                                    ) ??
-                                    0;
+                                final text = shareControllers[email]?.text ?? "0";
+                                final value = double.tryParse(text.replaceAll(",", ".")) ?? 0;
 
                                 if (value <= 0) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text(
-                                        "${email.split("@").first} için tutar gir",
-                                      ),
+                                      content: Text("${email.split("@").first} için tutar gir"),
                                     ),
                                   );
                                   return;
@@ -1943,7 +1996,8 @@ pw.Widget _pdfTableCell(
                                 totalShares += value;
                               }
 
-                              if ((totalShares - parsedAmount).abs() > 0.01) {
+                              if (splitType == "custom" &&
+                                  (totalShares - parsedAmount).abs() > 0.01) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
@@ -1952,6 +2006,17 @@ pw.Widget _pdfTableCell(
                                   ),
                                 );
                                 return;
+                              }
+
+                              if (splitType == "weighted") {
+                                final totalWeight = totalShares;
+                                customShares.clear();
+
+                                for (final email in selectedParticipants) {
+                                  final text = shareControllers[email]?.text ?? "0";
+                                  final weight = double.tryParse(text.replaceAll(",", ".")) ?? 0;
+                                  customShares[email] = parsedAmount * (weight / totalWeight);
+                                }
                               }
                             }
 
@@ -1965,7 +2030,7 @@ pw.Widget _pdfTableCell(
                                 participants: selectedParticipants,
                                 splitType: splitType,
                                 category: selectedCategory,
-                                shares: splitType == "custom"
+                                shares: splitType == "custom" || splitType == "weighted"
                                     ? customShares
                                     : {},
                               ),
@@ -2059,6 +2124,10 @@ void showEditExpenseDialog(
                         value: "custom",
                         child: Text("Kişiye Göre Tutar"),
                       ),
+                      DropdownMenuItem(
+                        value: "weighted",
+                        child: Text("Paya Göre"),
+                      ),
                     ],
                     onChanged: (value) {
                       if (value != null) {
@@ -2105,7 +2174,7 @@ void showEditExpenseDialog(
                     );
                   }).toList(),
 
-                  if (splitType == "custom") ...[
+                  if (splitType == "custom" || splitType == "weighted") ...[
                     const SizedBox(height: 12),
 
                     const Align(
@@ -2200,7 +2269,9 @@ void showEditExpenseDialog(
                         amount: parsedAmount,
                         splitType: splitType,
                         category: 'general',
-                        shares: splitType == "custom" ? customShares : {},
+                        shares: splitType == "custom" || splitType == "weighted"
+                          ? customShares
+                          : {},
                         currency: expense.currency,
                         paidBy: expense.paidBy,
                         participants: selectedParticipants,
@@ -2240,7 +2311,7 @@ void showEditExpenseDialog(
     balance[expense.paidBy] =
         (balance[expense.paidBy] ?? 0) + expense.amount;
 
-    if (expense.splitType == "custom") {
+    if (expense.splitType == "custom" || expense.splitType == "weighted") {
       expense.shares.forEach((email, shareAmount) {
         balance[email] = (balance[email] ?? 0) - shareAmount;
       });
@@ -2302,8 +2373,14 @@ void showEditExpenseDialog(
   }
 
   String displayNameForEmail(String email, Map<String, String> emailToName) {
-    return emailToName[email] ?? email.split('@').first;
+  final name = emailToName[email] ?? email.split("@").first;
+
+  if (email.startsWith("anonymous_")) {
+    return "Misafir: $name";
   }
+
+  return name;
+}
 
   Widget _buildChartTab(List<Expense> expenses, Map<String, String> emailToName) {
     if (expenses.isEmpty) {
@@ -2812,8 +2889,10 @@ void showEditExpenseDialog(
                       const SizedBox(width: 4),
                       Text(
                         expense.splitType == "custom"
-                            ? "Kişiye Göre"
-                            : "Eşit Böl",
+                          ? "Bölüşüm: Kişiye Göre"
+                          : expense.splitType == "weighted"
+                              ? "Bölüşüm: Paya Göre"
+                              : "Bölüşüm: Eşit Böl",
                         style: const TextStyle(
                           fontSize: 12,
                           color: Colors.grey,
@@ -2854,7 +2933,11 @@ void showEditExpenseDialog(
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  expense.splitType == "custom" ? "Kişiye Göre" : "Eşit Böl",
+                  expense.splitType == "custom"
+                    ? "Kişiye Göre"
+                    : expense.splitType == "weighted"
+                        ? "Paya Göre"
+                        : "Eşit Böl",
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -2960,6 +3043,14 @@ void showEditExpenseDialog(
   ) {
     return ListView(
       children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: OutlinedButton.icon(
+            onPressed: showAddAnonymousMemberDialog,
+            icon: const Icon(Icons.person_add_alt_1),
+            label: const Text('Anonim Üye Ekle'),
+          ),
+        ),
         const ListTile(
           title: Text('Üyeler'),
           subtitle: Text('Yeni üyeler ana sayfadaki grup kodu ile katılır.'),
@@ -3020,7 +3111,7 @@ void showEditExpenseDialog(
         const ListTile(title: Text('Borç / Alacak Durumu')),
         ...memberEmails.map((email) {
           final value = balances[email] ?? 0;
-          final name = email.split("@").first;
+          final name = displayNameForEmail(email, emailToName);
           Color color;
           String text;
           if (value > 0) {
