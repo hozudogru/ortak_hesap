@@ -23,7 +23,8 @@ workflows:
 
       - name: Install CocoaPods
         script: |
-          cd ios
+          rm -rf Pods Podfile.lock
+          pod repo update
           pod install
           cd ..
 
@@ -40,6 +41,7 @@ workflows:
             --scheme Runner
 
     artifacts:
+      - /tmp/xcodebuild_logs/*.log
       - build/ios/ipa/*.ipa
     
     publishing:
