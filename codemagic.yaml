@@ -58,6 +58,8 @@ workflows:
 
     environment:
       flutter: stable
+      groups:
+        - default
       android_signing:
         - Ortak_Hesap_Takip
 
