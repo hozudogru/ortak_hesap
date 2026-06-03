@@ -52,3 +52,29 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+
+  android-workflow:
+    name: "Android Build"
+
+    environment:
+      flutter: stable
+      android_signing:
+        - Ortak_Hesap_Takip
+
+    scripts:
+      - name: Install dependencies
+        script: |
+          flutter pub get
+
+      - name: Build AAB
+        script: |
+          flutter build appbundle --release
+
+    artifacts:
+      - build/app/outputs/bundle/release/*.aab
+
+    publishing:
+      google_play:
+        credentials: $GPLAY_SERVICE_ACCOUNT_JSON
+        track: internal
+        submit_to_rollout: false
