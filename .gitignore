@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+ortak-hesap-app-*.json
+*-firebase-adminsdk-*.json
