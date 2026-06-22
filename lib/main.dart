@@ -1642,9 +1642,6 @@ pw.Widget _pdfTableCell(
   }
 
   Future<void> saveExpenseToFirebase(Expense expense) async {
-    final user = FirebaseAuth.instance.currentUser;
-    final payerEmail = user?.email?.trim().toLowerCase() ?? '';
-
     await FirebaseFirestore.instance
         .collection('groups')
         .doc(widget.groupName)
@@ -1653,9 +1650,8 @@ pw.Widget _pdfTableCell(
       'title': expense.title,
       'amount': expense.amount,
       'currency': expense.currency,
-      'paidBy': payerEmail,
-      'paidByUid': user?.uid,
-      'paidByEmail': payerEmail,
+      'paidBy': expense.paidBy,
+      'paidByEmail': expense.paidBy,
       'participants': expense.participants.map((e) => e.trim().toLowerCase()).toList(),
       'splitType': expense.splitType,
       'category': expense.category,
@@ -1673,6 +1669,8 @@ pw.Widget _pdfTableCell(
         .update({
       'title': expense.title,
       'amount': expense.amount,
+      'paidBy': expense.paidBy,
+      'paidByEmail': expense.paidBy,
       'participants': expense.participants.map((e) => e.trim().toLowerCase()).toList(),
       'splitType': expense.splitType,
       'shares': expense.shares,
@@ -1724,7 +1722,7 @@ pw.Widget _pdfTableCell(
 
   final Map<String, TextEditingController> shareControllers = {};
   final currentUser = FirebaseAuth.instance.currentUser;
-  final selectedPaidBy = currentUser?.email?.trim().toLowerCase() ?? '';
+  String selectedPaidBy = currentUser?.email?.trim().toLowerCase() ?? '';
   final List<String> selectedParticipants = List.from(memberEmails);
 
   showModalBottomSheet(
@@ -1797,6 +1795,33 @@ pw.Widget _pdfTableCell(
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  DropdownButtonFormField<String>(
+                    value: memberEmails.contains(selectedPaidBy)
+                        ? selectedPaidBy
+                        : (memberEmails.isNotEmpty ? memberEmails.first : null),
+                    decoration: InputDecoration(
+                      labelText: "Ödeyen",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    items: memberEmails.map((email) {
+                      final name = email.startsWith('anonymous_')
+                          ? 'Misafir: ${email.split('_')[1]}'
+                          : email.split('@').first;
+                      return DropdownMenuItem(value: email, child: Text(name));
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          selectedPaidBy = value;
+                        });
+                      }
+                    },
                   ),
 
                   const SizedBox(height: 12),
@@ -2063,6 +2088,7 @@ void showEditExpenseDialog(
   String title = expense.title;
   String amount = expense.amount.toString();
   String splitType = expense.splitType;
+  String selectedPaidBy = expense.paidBy;
 
   final titleController = TextEditingController(text: title);
   final amountController = TextEditingController(text: amount);
@@ -2105,6 +2131,31 @@ void showEditExpenseDialog(
                     decoration: const InputDecoration(
                       hintText: 'Tutar',
                     ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  DropdownButtonFormField<String>(
+                    value: memberEmails.contains(selectedPaidBy)
+                        ? selectedPaidBy
+                        : (memberEmails.isNotEmpty ? memberEmails.first : null),
+                    decoration: const InputDecoration(
+                      labelText: "Ödeyen",
+                      border: OutlineInputBorder(),
+                    ),
+                    items: memberEmails.map((email) {
+                      final name = email.startsWith('anonymous_')
+                          ? 'Misafir: ${email.split('_')[1]}'
+                          : emailToName[email] ?? email.split('@').first;
+                      return DropdownMenuItem(value: email, child: Text(name));
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          selectedPaidBy = value;
+                        });
+                      }
+                    },
                   ),
 
                   const SizedBox(height: 12),
@@ -2273,7 +2324,7 @@ void showEditExpenseDialog(
                           ? customShares
                           : {},
                         currency: expense.currency,
-                        paidBy: expense.paidBy,
+                        paidBy: selectedPaidBy,
                         participants: selectedParticipants,
                       ),
                     );
