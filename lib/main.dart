@@ -463,11 +463,15 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void openGroupDetail(String groupName, String groupCurrency) {
+  void openGroupDetail(String groupName, String groupCurrency, String ownerEmail) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => GroupDetailPage(groupName: groupName,  groupCurrency: groupCurrency),
+        builder: (context) => GroupDetailPage(
+          groupName: groupName,
+          groupCurrency: groupCurrency,
+          ownerEmail: ownerEmail,
+        ),
       ),
     );
   }
@@ -863,7 +867,11 @@ class _HomePageState extends State<HomePage> {
                                         ),
                                       ],
                                     ),
-                                    onTap: () => openGroupDetail(groupName, groupCurrency),
+                                    onTap: () => openGroupDetail(
+                                      groupName,
+                                      groupCurrency,
+                                      (data['ownerEmail'] ?? '').toString().trim().toLowerCase(),
+                                    ),
                                     onLongPress: () {
                                       showDialog(
                                         context: context,
@@ -908,11 +916,13 @@ class _HomePageState extends State<HomePage> {
 class GroupDetailPage extends StatefulWidget {
   final String groupName;
   final String groupCurrency;
+  final String ownerEmail;
 
   const GroupDetailPage({
     super.key,
     required this.groupName,
     required this.groupCurrency,
+    required this.ownerEmail,
   });
 
   @override
@@ -920,6 +930,12 @@ class GroupDetailPage extends StatefulWidget {
 }
 
 class _GroupDetailPageState extends State<GroupDetailPage> {
+  bool get _isOwner {
+    final currentEmail =
+        FirebaseAuth.instance.currentUser?.email?.trim().toLowerCase() ?? '';
+    return currentEmail.isNotEmpty && currentEmail == widget.ownerEmail;
+  }
+
   Future<void> addAnonymousMemberToFirebase(String name) async {
   final cleanName = name.trim();
 
@@ -1013,6 +1029,7 @@ void showAddAnonymousMemberDialog() {
   required BuildContext context,
   required String groupName,
   required List<Map<String, dynamic>> expenses,
+  required Map<String, String> emailToName,
 }) async {
   final pdf = pw.Document();
 
@@ -1080,12 +1097,7 @@ void showAddAnonymousMemberDialog() {
 
     return value.toString();
   }
-String displayName(String value) {
-  if (value.contains('@')) {
-    return value.split('@').first;
-  }
-  return value;
-}
+String dn(String value) => resolveDisplayName(value, emailToName);
   final double totalExpense = expenses.fold(
     0.0,
     (sum, item) => sum + readAmount(item),
@@ -1106,30 +1118,29 @@ final Map<String, double> balances = {};
 
 for (final expense in expenses) {
   final amount = readAmount(expense);
-  final paidBy = readText(
-    expense,
-    [
-      'paidBy',
-      'odeyen',
-      'ödeyen',
-      'payer',
-      'paidByEmail',
-    ],
-    defaultValue: '',
-  );
-
+  final paidBy = readText(expense, ['paidBy', 'paidByEmail'], defaultValue: '');
   final participants = readParticipants(expense);
+  final splitType = (expense['splitType'] ?? 'equal').toString();
+  final rawShares = expense['shares'];
+  final Map<String, double> shares = rawShares is Map
+      ? Map<String, double>.from(
+          rawShares.map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
+        )
+      : {};
 
-  if (amount <= 0 || paidBy.isEmpty || participants.isEmpty) {
-    continue;
-  }
-
-  final double share = amount / participants.length;
+  if (amount <= 0 || paidBy.isEmpty || participants.isEmpty) continue;
 
   balances[paidBy] = (balances[paidBy] ?? 0) + amount;
 
-  for (final participant in participants) {
-    balances[participant] = (balances[participant] ?? 0) - share;
+  if ((splitType == 'custom' || splitType == 'weighted') && shares.isNotEmpty) {
+    shares.forEach((participant, shareAmount) {
+      balances[participant] = (balances[participant] ?? 0) - shareAmount;
+    });
+  } else {
+    final double share = amount / participants.length;
+    for (final participant in participants) {
+      balances[participant] = (balances[participant] ?? 0) - share;
+    }
   }
 }
 
@@ -1138,17 +1149,15 @@ final List<Map<String, dynamic>> creditors = [];
 
 balances.forEach((person, balance) {
   if (balance < -0.01) {
-    debtors.add({
-      'person': person,
-      'amount': -balance,
-    });
+    debtors.add({'person': person, 'amount': -balance});
   } else if (balance > 0.01) {
-    creditors.add({
-      'person': person,
-      'amount': balance,
-    });
+    creditors.add({'person': person, 'amount': balance});
   }
 });
+
+// Büyükten küçüğe sırala — minimum işlem, deterministik sıra
+debtors.sort((a, b) => (b['amount'] as double).compareTo(a['amount'] as double));
+creditors.sort((a, b) => (b['amount'] as double).compareTo(a['amount'] as double));
 
 final List<Map<String, dynamic>> paymentPlan = [];
 
@@ -1165,24 +1174,20 @@ while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
   final double paymentAmount =
       debtAmount < creditAmount ? debtAmount : creditAmount;
 
-  paymentPlan.add({
-    'from': debtor['person'],
-    'to': creditor['person'],
-    'amount': paymentAmount,
-  });
+  if (paymentAmount > 0.01) {
+    paymentPlan.add({
+      'from': debtor['person'],
+      'to': creditor['person'],
+      'amount': paymentAmount,
+    });
+  }
 
   debtor['amount'] = debtAmount - paymentAmount;
   creditor['amount'] = creditAmount - paymentAmount;
 
-  if ((debtor['amount'] as double) <= 0.01) {
-    debtorIndex++;
-  }
-
-  if ((creditor['amount'] as double) <= 0.01) {
-    creditorIndex++;
-  }
+  if ((debtor['amount'] as double) <= 0.01) debtorIndex++;
+  if ((creditor['amount'] as double) <= 0.01) creditorIndex++;
 }
-print('PAYMENT PLAN: $paymentPlan');
   pdf.addPage(
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
@@ -1314,7 +1319,7 @@ print('PAYMENT PLAN: $paymentPlan');
             final participantsList = readParticipants(expense);
 
             final participants = participantsList.isNotEmpty
-                ? participantsList.map((e) => displayName(e)).join(', ')
+                ? participantsList.map((e) => dn(e)).join(', ')
                 : '-';
 
             final date = readDate(expense);
@@ -1357,7 +1362,7 @@ print('PAYMENT PLAN: $paymentPlan');
                     ],
                   ),
                   pw.SizedBox(height: 8),
-                  _pdfInfoRow('Ödeyen', displayName(paidBy)),
+                  _pdfInfoRow('Ödeyen', dn(paidBy)),
                   _pdfInfoRow('Bölüşüm Tipi', splitTypeText),
                   _pdfInfoRow('Katılanlar', participants),
                   _pdfInfoRow('Tarih', date),
@@ -1398,7 +1403,7 @@ print('PAYMENT PLAN: $paymentPlan');
                     borderRadius: pw.BorderRadius.circular(8),
                   ),
                   child: pw.Text(
-                    displayName(name),
+                    dn(name),
                     style: const pw.TextStyle(fontSize: 10),
                   ),
                 );
@@ -1434,8 +1439,8 @@ if (paymentPlan.isEmpty)
 else
   pw.Column(
     children: paymentPlan.map((payment) {
-      final from = displayName(payment['from'].toString());
-      final to = displayName(payment['to'].toString());
+      final from = dn(payment['from'].toString());
+      final to = dn(payment['to'].toString());
       final amount = payment['amount'] as double;
 
       return pw.Container(
@@ -1696,7 +1701,7 @@ pw.Widget _pdfTableCell(
         .delete();
   }
 
-  void showAddExpenseDialog(List<String> memberEmails) async {
+  void showAddExpenseDialog(List<String> memberEmails, Map<String, String> emailToName) async {
   final groupDoc = await FirebaseFirestore.instance
       .collection('groups')
       .doc(widget.groupName)
@@ -1810,10 +1815,10 @@ pw.Widget _pdfTableCell(
                       ),
                     ),
                     items: memberEmails.map((email) {
-                      final name = email.startsWith('anonymous_')
-                          ? 'Misafir: ${email.split('_')[1]}'
-                          : email.split('@').first;
-                      return DropdownMenuItem(value: email, child: Text(name));
+                      return DropdownMenuItem(
+                        value: email,
+                        child: Text(resolveDisplayName(email, emailToName)),
+                      );
                     }).toList(),
                     onChanged: (value) {
                       if (value != null) {
@@ -2144,10 +2149,10 @@ void showEditExpenseDialog(
                       border: OutlineInputBorder(),
                     ),
                     items: memberEmails.map((email) {
-                      final name = email.startsWith('anonymous_')
-                          ? 'Misafir: ${email.split('_')[1]}'
-                          : emailToName[email] ?? email.split('@').first;
-                      return DropdownMenuItem(value: email, child: Text(name));
+                      return DropdownMenuItem(
+                        value: email,
+                        child: Text(resolveDisplayName(email, emailToName)),
+                      );
                     }).toList(),
                     onChanged: (value) {
                       if (value != null) {
@@ -2200,7 +2205,7 @@ void showEditExpenseDialog(
                   ),
 
                   ...memberEmails.map((email) {
-                    final name = displayNameForEmail(email, emailToName);
+                    final name = resolveDisplayName(email, emailToName);
 
                     return CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
@@ -2253,7 +2258,7 @@ void showEditExpenseDialog(
                           keyboardType: TextInputType.number,
                           decoration: InputDecoration(
                             labelText:
-                                "${displayNameForEmail(email, emailToName)} payı",
+                                "${resolveDisplayName(email, emailToName)} payı",
                             border: const OutlineInputBorder(),
                           ),
                         ),
@@ -2290,7 +2295,7 @@ void showEditExpenseDialog(
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                "${displayNameForEmail(email, emailToName)} için tutar gir",
+                                "${resolveDisplayName(email, emailToName)} için tutar gir",
                               ),
                             ),
                           );
@@ -2397,41 +2402,692 @@ void showEditExpenseDialog(
   Map<String, double> balance,
   String groupCurrency,
 ) {
-    final List<MapEntry<String, double>> creditors = [];
-    final List<MapEntry<String, double>> debtors = [];
+    // Mutable listeler: [email, kalan_miktar]
+    final List<List<dynamic>> creditors = [];
+    final List<List<dynamic>> debtors = [];
 
     balance.forEach((email, value) {
       if (value > 0.01) {
-        creditors.add(MapEntry(email, value));
+        creditors.add([email, value]);
       } else if (value < -0.01) {
-        debtors.add(MapEntry(email, value.abs()));
+        debtors.add([email, value.abs()]);
       }
     });
+
+    // Büyükten küçüğe sırala — en büyük borçlu en büyük alacaklıyla eşleşsin
+    creditors.sort((a, b) => (b[1] as double).compareTo(a[1] as double));
+    debtors.sort((a, b) => (b[1] as double).compareTo(a[1] as double));
 
     final List<String> result = [];
     int i = 0;
     int j = 0;
 
     while (i < debtors.length && j < creditors.length) {
-      final amount = debtors[i].value < creditors[j].value ? debtors[i].value : creditors[j].value;
-      result.add('${debtors[i].key} → ${creditors[j].key}: ${amount.toStringAsFixed(2)}  $groupCurrency');
-      debtors[i] = MapEntry(debtors[i].key, debtors[i].value - amount);
-      creditors[j] = MapEntry(creditors[j].key, creditors[j].value - amount);
-      if (debtors[i].value <= 0.01) i++;
-      if (creditors[j].value <= 0.01) j++;
+      final double debtorAmount = debtors[i][1] as double;
+      final double creditorAmount = creditors[j][1] as double;
+      final double paymentAmount =
+          debtorAmount < creditorAmount ? debtorAmount : creditorAmount;
+
+      // Floating point kalıntılarını (< 0.01) satır olarak gösterme
+      if (paymentAmount > 0.01) {
+        result.add(
+          '${debtors[i][0]} → ${creditors[j][0]}: ${paymentAmount.toStringAsFixed(2)}  $groupCurrency',
+        );
+      }
+
+      debtors[i][1] = debtorAmount - paymentAmount;
+      creditors[j][1] = creditorAmount - paymentAmount;
+
+      if ((debtors[i][1] as double) <= 0.01) i++;
+      if ((creditors[j][1] as double) <= 0.01) j++;
     }
     return result;
   }
 
-  String displayNameForEmail(String email, Map<String, String> emailToName) {
-  final name = emailToName[email] ?? email.split("@").first;
+  String resolveDisplayName(String email, Map<String, String> emailToName) {
+  // 1. Önce Firestore'dan gelen nickname/name değerine bak
+  final stored = emailToName[email];
+  if (stored != null && stored.isNotEmpty && !stored.startsWith('anonymous_')) {
+    return stored;
+  }
+  // 2. Anonim üye — ID'den isim çıkar: anonymous_hasan_senel_1782141979680 → "Hasan Senel"
+  if (email.startsWith('anonymous_')) {
+    final parts = email.split('_');
+    if (parts.length > 2) {
+      final nameParts = parts.sublist(1, parts.length - 1);
+      return nameParts
+          .map((p) => p.isNotEmpty ? p[0].toUpperCase() + p.substring(1) : p)
+          .join(' ');
+    }
+    return 'Misafir';
+  }
+  // 3. Gerçek e-posta — @ öncesi kısım
+  if (email.contains('@')) {
+    return email.split('@').first;
+  }
+  return email.isNotEmpty ? email : 'Bilinmeyen';
+}
 
-  if (email.startsWith("anonymous_")) {
-    return "Misafir: $name";
+  double _computeBalanceSumFromData(List<Map<String, dynamic>> expenseDataList) {
+    final Map<String, double> balance = {};
+    for (final data in expenseDataList) {
+      final String paidBy = (data['paidByEmail'] ?? data['paidBy'] ?? '')
+          .toString().trim().toLowerCase();
+      final List<String> participants = List<String>.from(
+        (data['participants'] as List? ?? [])
+            .map((e) => e.toString().trim().toLowerCase()),
+      );
+      final Map<String, dynamic> shares = data['shares'] is Map
+          ? Map<String, dynamic>.from(data['shares'] as Map)
+          : {};
+      final String splitType = (data['splitType'] ?? 'equal').toString();
+      final double amount = ((data['amount'] as num?) ?? 0).toDouble();
+
+      if (paidBy.isEmpty || amount <= 0) continue;
+
+      balance[paidBy] = (balance[paidBy] ?? 0) + amount;
+
+      if ((splitType == 'custom' || splitType == 'weighted') && shares.isNotEmpty) {
+        shares.forEach((key, value) {
+          balance[key] = (balance[key] ?? 0) - (value as num).toDouble();
+        });
+      } else {
+        if (participants.isEmpty) continue;
+        final double share = amount / participants.length;
+        for (final p in participants) {
+          balance[p] = (balance[p] ?? 0) - share;
+        }
+      }
+    }
+    return balance.values.fold(0.0, (s, v) => s + v);
   }
 
-  return name;
-}
+  Future<void> mergeMember({
+    required String anonEmail,
+    String? anonDocId,   // null ise üye zaten silinmiş (orphan) — members'a dokunma
+    required String targetEmail,
+  }) async {
+    // BUG 1: normalize — paidBy/participants lowercase; normalize edilmemiş
+    // parametre ile karşılaştırma sessizce false döner.
+    anonEmail   = anonEmail.trim().toLowerCase();
+    targetEmail = targetEmail.trim().toLowerCase();
+
+    if (anonEmail == targetEmail) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kaynak ve hedef üye aynı kişi.')));
+      return;
+    }
+    // Not: Hedef anonim olabilir — orphan merge senaryosunda hedef kayıtlı
+    // bir anonim üye olabilir. UI katmanı zaten geçerli hedefleri kısıtlıyor.
+
+    final groupRef = FirebaseFirestore.instance
+        .collection('groups')
+        .doc(widget.groupName);
+
+    final expensesSnap = await groupRef.collection('expenses').get();
+
+    final List<Map<String, dynamic>> originalData = expensesSnap.docs
+        .map((doc) => Map<String, dynamic>.from(doc.data()))
+        .toList();
+
+    // PRE-MERGE: toplam tutar ve bakiye toplamı
+    final double preTotalAmount = originalData.fold(
+      0.0, (s, d) => s + ((d['amount'] as num?) ?? 0).toDouble());
+
+    final double preBalanceSum = _computeBalanceSumFromData(originalData);
+    if (preBalanceSum.abs() > 0.01) {
+      debugPrint('Merge iptal — pre-merge bakiye toplamı: $preBalanceSum');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          'Merge iptal: Mevcut gider verileri tutarsız '
+          '(bakiye Δ: ${preBalanceSum.toStringAsFixed(4)}).')));
+      return;
+    }
+
+    final List<Map<String, dynamic>> updatedAllData    = [];
+    final List<Map<String, dynamic>> affectedBackup    = [];
+    final Map<String, Map<String, dynamic>> expenseUpdates = {};
+
+    for (final doc in expensesSnap.docs) {
+      final data      = Map<String, dynamic>.from(doc.data());
+      final String splitType = (data['splitType'] ?? 'equal').toString();
+      final double amount    = ((data['amount'] as num?) ?? 0).toDouble();
+
+      // BUG 1: paidBy normalize
+      final String paidBy = (data['paidByEmail'] ?? data['paidBy'] ?? '')
+          .toString().trim().toLowerCase();
+
+      // BUG 1: participants normalize
+      final List<String> participants = List<String>.from(
+        (data['participants'] as List? ?? [])
+            .map((e) => e.toString().trim().toLowerCase()),
+      );
+
+      // BUG 1: shares key'lerini normalize — yazılırken lowercase, okurken ham
+      final rawShares = data['shares'];
+      final Map<String, dynamic> shares = rawShares is Map
+          ? Map<String, dynamic>.from(
+              (rawShares).map((k, v) =>
+                MapEntry(k.toString().trim().toLowerCase(), v)),
+            )
+          : {};
+
+      final bool anonIsPayer       = paidBy == anonEmail;
+      final bool anonIsParticipant = participants.contains(anonEmail);
+      final bool anonInShares      = shares.containsKey(anonEmail);
+
+      if (!anonIsPayer && !anonIsParticipant && !anonInShares) {
+        updatedAllData.add(data);
+        continue;
+      }
+
+      affectedBackup.add({'id': doc.id, 'data': data});
+
+      // Edge Case 1: paidBy anon ise → targetEmail
+      final String newPaidBy = anonIsPayer ? targetEmail : paidBy;
+
+      // Edge Case 2: anon → target dönüşümü + deduplicate
+      // Hem anon hem target varsa count azalır; equal split yeni sayıya göre hesaplanır.
+      final List<String> newParticipants = participants
+          .map((e) => e == anonEmail ? targetEmail : e)
+          .toSet()
+          .toList();
+
+      // Edge Case 3: shares — rename veya topla (tek mantık)
+      // IMPROVEMENT 4: equal split'te shares'i temizle (kirli veri)
+      Map<String, dynamic> newShares;
+      if (splitType == 'equal') {
+        newShares = {};
+      } else {
+        newShares = Map<String, dynamic>.from(shares);
+        if (anonInShares) {
+          final double anonShare =
+              ((newShares[anonEmail] as num?) ?? 0).toDouble();
+          final double existingTargetShare =
+              ((newShares[targetEmail] as num?) ?? 0).toDouble();
+          newShares[targetEmail] = anonShare + existingTargetShare;
+          newShares.remove(anonEmail);
+        }
+
+        // IMPROVEMENT 3: shares sum — assert yerine gerçek iptal
+        if (newShares.isNotEmpty) {
+          final double sharesSum = newShares.values
+              .fold(0.0, (s, v) => s + (v as num).toDouble());
+          if ((sharesSum - amount).abs() > 0.02) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(
+                'Merge iptal: "${data['title']}" giderinde shares toplamı '
+                '(${sharesSum.toStringAsFixed(2)}) tutarla '
+                '(${amount.toStringAsFixed(2)}) uyuşmuyor.')));
+            return;
+          }
+        }
+      }
+
+      final Map<String, dynamic> updatedEntry = {
+        ...data,
+        'paidBy':       newPaidBy,
+        'paidByEmail':  newPaidBy,
+        'participants': newParticipants,
+        'shares':       newShares,
+      };
+      updatedAllData.add(updatedEntry);
+      expenseUpdates[doc.id] = {
+        'paidBy':       newPaidBy,
+        'paidByEmail':  newPaidBy,
+        'participants': newParticipants,
+        'shares':       newShares,
+      };
+    }
+
+    // POST-MERGE: in-memory doğrulama (commit öncesi)
+    final double postTotalAmount = updatedAllData
+        .fold(0.0, (s, d) => s + ((d['amount'] as num?) ?? 0).toDouble());
+    if ((preTotalAmount - postTotalAmount).abs() > 0.01) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(
+          'Merge iptal: Toplam harcama tutarı değişiyor. Beklenmedik durum.')));
+      return;
+    }
+
+    final double postBalanceSum = _computeBalanceSumFromData(updatedAllData);
+    if (postBalanceSum.abs() > 0.01) {
+      debugPrint(
+        'Merge iptal — post-merge bakiye toplamı: $postBalanceSum\n'
+        'Commit edilmedi; mevcut Firestore verisi temiz. Rollback gerekmez.');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          'Merge iptal: Bakiye dengesi bozuluyor '
+          '(Δ: ${postBalanceSum.toStringAsFixed(4)}). İşlem iptal edildi.')));
+      return;
+    }
+
+    // Batch oluştur
+    final batch = FirebaseFirestore.instance.batch();
+
+    // Yedek: etkilenen giderlerin orijinal snapshot'ı
+    if (affectedBackup.isNotEmpty) {
+      final backupRef = groupRef
+          .collection('_merge_backups')
+          .doc('${DateTime.now().millisecondsSinceEpoch}');
+      batch.set(backupRef, {
+        'mergedFrom':           anonEmail,
+        'mergedInto':           targetEmail,
+        'createdAt':            FieldValue.serverTimestamp(),
+        'affectedExpenseCount': affectedBackup.length,
+        'affectedExpenses':     affectedBackup,
+      });
+    }
+
+    for (final entry in expenseUpdates.entries) {
+      batch.update(
+        groupRef.collection('expenses').doc(entry.key),
+        entry.value,
+      );
+    }
+
+    // anonDocId null ise orphan merge — member dökümanı zaten yok
+    if (anonDocId != null && anonDocId.isNotEmpty) {
+      batch.delete(groupRef.collection('members').doc(anonDocId));
+    }
+
+    await batch.commit();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(
+        '${affectedBackup.length} gider güncellendi, '
+        'anonim üye birleştirildi.')));
+  }
+
+  void showMergeMemberDialog({
+    required String anonEmail,
+    required String anonDocId,
+    required List<String> memberEmails,
+    required Map<String, String> emailToName,
+  }) {
+    final realMembers = memberEmails
+        .where((e) => !e.startsWith('anonymous_') && e != anonEmail)
+        .toList();
+
+    if (realMembers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Birleştirmek için gerçek üye bulunamadı.')));
+      return;
+    }
+
+    String selectedTarget = realMembers.first;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('Üye Birleştir'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '"${resolveDisplayName(anonEmail, emailToName)}" adlı anonim üyeyi '
+                'aşağıdaki gerçek üyeyle birleştir:'),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedTarget,
+                decoration: const InputDecoration(
+                  labelText: 'Hedef üye',
+                  border: OutlineInputBorder(),
+                ),
+                items: realMembers.map((e) => DropdownMenuItem(
+                  value: e,
+                  child: Text(resolveDisplayName(e, emailToName)),
+                )).toList(),
+                onChanged: (v) { if (v != null) setS(() => selectedTarget = v); },
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Bu işlem geri alınamaz.\n'
+                'Tüm giderlerdeki referanslar güncellenecek,\n'
+                'anonim üye kaydı silinecek.',
+                style: TextStyle(color: Colors.red, fontSize: 13),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('İptal'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await mergeMember(
+                  anonEmail: anonEmail,
+                  anonDocId: anonDocId,
+                  targetEmail: selectedTarget,
+                );
+              },
+              child: const Text('Birleştir'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Belirli bir e-postanın giderlerde hâlâ geçip geçmediğini ve merge backup'larını gösterir.
+  Future<void> debugEmailInExpenses(String searchEmail) async {
+    final target = searchEmail.trim().toLowerCase();
+    final groupRef = FirebaseFirestore.instance
+        .collection('groups')
+        .doc(widget.groupName);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Taranıyor...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
+    QuerySnapshot<Map<String, dynamic>>? expensesSnap;
+    List<Map<String, dynamic>> backupDocs = [];
+    String? backupError;
+
+    try {
+      expensesSnap = await groupRef.collection('expenses').get();
+    } catch (e) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Diagnostic Hatası'),
+          content: Text('Giderler okunamadı:\n$e'),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Tamam'))],
+        ),
+      );
+      return;
+    }
+
+    try {
+      final snap = await groupRef.collection('_merge_backups').get();
+      backupDocs = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+    } catch (e) {
+      backupError = e.toString();
+    }
+
+    // Ham Firestore verisinde tüm alanları kontrol et (normalizasyon olmadan)
+    final List<String> matches = [];
+    for (final doc in expensesSnap.docs) {
+      final data = doc.data();
+      final fields = <String>[];
+
+      // paidBy ve paidByEmail — normalizasyonlu VE ham
+      final rawPaidByEmail = (data['paidByEmail'] ?? '').toString();
+      final rawPaidBy      = (data['paidBy'] ?? '').toString();
+      if (rawPaidByEmail.trim().toLowerCase() == target) fields.add('paidByEmail("$rawPaidByEmail")');
+      if (rawPaidBy.trim().toLowerCase() == target && rawPaidBy != rawPaidByEmail)
+        fields.add('paidBy("$rawPaidBy")');
+
+      // participants — ham değerler
+      final participants = data['participants'] as List? ?? [];
+      for (final p in participants) {
+        if (p.toString().trim().toLowerCase() == target) {
+          fields.add('participants("$p")');
+          break;
+        }
+      }
+
+      // shares keys — ham değerler
+      final shares = data['shares'];
+      if (shares is Map) {
+        for (final k in shares.keys) {
+          if (k.toString().trim().toLowerCase() == target) {
+            fields.add('shares.key("$k")');
+            break;
+          }
+        }
+      }
+
+      if (fields.isNotEmpty) {
+        matches.add('"${data['title'] ?? '(isimsiz)'}" [${fields.join(' | ')}]');
+      }
+    }
+
+    // Backup özeti
+    final List<String> backupInfo = backupDocs.map((d) {
+      final from  = d['mergedFrom'] ?? '?';
+      final into  = d['mergedInto'] ?? '?';
+      final count = d['affectedExpenseCount'] ?? '?';
+      final id    = d['id'] ?? '';
+      return 'ID:$id\n  $from\n  → $into\n  ($count gider)';
+    }).toList();
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Diagnostic', style: TextStyle(fontSize: 16)),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Aranan: $target',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              const SizedBox(height: 8),
+              Text('Giderlerde eşleşme (${matches.length}):',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              if (matches.isEmpty)
+                const Text('  ✓ Bulunamadı — email tamamen temizlenmiş.',
+                    style: TextStyle(color: Colors.green, fontSize: 12))
+              else
+                ...matches.map((m) => Padding(
+                      padding: const EdgeInsets.only(left: 8, top: 4),
+                      child: Text('• $m', style: const TextStyle(fontSize: 12)),
+                    )),
+              const Divider(height: 24),
+              Text(
+                '_merge_backups (${backupInfo.length} kayıt)'
+                '${backupError != null ? " — HATA" : ""}:',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+              if (backupError != null)
+                Text('  İzin hatası: $backupError',
+                    style: const TextStyle(color: Colors.orange, fontSize: 11))
+              else if (backupInfo.isEmpty)
+                const Text('  Backup kaydı yok.',
+                    style: TextStyle(color: Colors.orange, fontSize: 12))
+              else
+                ...backupInfo.map((b) => Padding(
+                      padding: const EdgeInsets.only(left: 8, top: 4),
+                      child: Text(b, style: const TextStyle(fontSize: 11)),
+                    )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Kapat')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> scanOrphanReferences(List<String> memberEmails) async {
+    final groupRef = FirebaseFirestore.instance
+        .collection('groups')
+        .doc(widget.groupName);
+
+    final registeredEmails = memberEmails
+        .map((e) => e.trim().toLowerCase())
+        .toSet();
+
+    final expensesSnap = await groupRef.collection('expenses').get();
+
+    // Giderlerdeki tüm benzersiz e-postalar
+    final Set<String> referencedEmails = {};
+    for (final doc in expensesSnap.docs) {
+      final data = doc.data();
+      final paidBy = (data['paidByEmail'] ?? data['paidBy'] ?? '')
+          .toString().trim().toLowerCase();
+      if (paidBy.isNotEmpty) referencedEmails.add(paidBy);
+
+      for (final p in (data['participants'] as List? ?? [])) {
+        final pe = p.toString().trim().toLowerCase();
+        if (pe.isNotEmpty) referencedEmails.add(pe);
+      }
+
+      final shares = data['shares'];
+      if (shares is Map) {
+        for (final k in shares.keys) {
+          final ke = k.toString().trim().toLowerCase();
+          if (ke.isNotEmpty) referencedEmails.add(ke);
+        }
+      }
+    }
+
+    // Kayıtlı üye olmayan referanslar
+    final orphans = referencedEmails
+        .where((e) => !registeredEmails.contains(e))
+        .toList()
+      ..sort();
+
+    if (!mounted) return;
+
+    if (orphans.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Yetim referans bulunamadı.')));
+      return;
+    }
+
+    // Her orphan için etkilenen gider listesi
+    final Map<String, List<String>> orphanDetails = {};
+    for (final orphan in orphans) {
+      final affected = <String>[];
+      for (final doc in expensesSnap.docs) {
+        final data = doc.data();
+        final paidBy = (data['paidByEmail'] ?? data['paidBy'] ?? '')
+            .toString().trim().toLowerCase();
+        final participants = (data['participants'] as List? ?? [])
+            .map((p) => p.toString().trim().toLowerCase())
+            .toList();
+        final shareKeys = (data['shares'] is Map)
+            ? (data['shares'] as Map).keys
+                .map((k) => k.toString().trim().toLowerCase())
+                .toList()
+            : <String>[];
+
+        final fields = <String>[];
+        if (paidBy == orphan) fields.add('paidBy');
+        if (participants.contains(orphan)) fields.add('participants');
+        if (shareKeys.contains(orphan)) fields.add('shares');
+
+        if (fields.isNotEmpty) {
+          final title = (data['title'] ?? '(isimsiz)').toString();
+          affected.add('"$title" [${fields.join(', ')}]');
+        }
+      }
+      orphanDetails[orphan] = affected;
+    }
+
+    final realMembers = memberEmails
+        .where((e) => !e.startsWith('anonymous_'))
+        .toList();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Yetim Referanslar (${orphans.length})'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: orphans.map((orphan) {
+              final details = orphanDetails[orphan] ?? [];
+              String selectedTarget = memberEmails.isNotEmpty
+                  ? (realMembers.isNotEmpty ? realMembers.first : memberEmails.first)
+                  : '';
+              return StatefulBuilder(
+                builder: (ctx2, setSt) => Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(orphan,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.deepOrange,
+                              fontSize: 12)),
+                      ...details.map((d) => Padding(
+                            padding: const EdgeInsets.only(left: 8, top: 2),
+                            child: Text('→ $d',
+                                style: const TextStyle(fontSize: 11)),
+                          )),
+                      const SizedBox(height: 6),
+                      if (memberEmails.isNotEmpty) ...[
+                        DropdownButtonFormField<String>(
+                          value: selectedTarget,
+                          isDense: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Birleştir →',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                          ),
+                          items: memberEmails.map((e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(resolveDisplayName(e, {}),
+                                style: const TextStyle(fontSize: 12)),
+                          )).toList(),
+                          onChanged: (v) {
+                            if (v != null) setSt(() => selectedTarget = v);
+                          },
+                        ),
+                        const SizedBox(height: 4),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.deepOrange,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4)),
+                            icon: const Icon(Icons.merge_type,
+                                size: 16, color: Colors.white),
+                            label: const Text('Birleştir',
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.white)),
+                            onPressed: () async {
+                              Navigator.pop(ctx);
+                              await mergeMember(
+                                anonEmail: orphan,
+                                anonDocId: null, // orphan — member dökümanı yok
+                                targetEmail: selectedTarget,
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                      const Divider(),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Kapat')),
+        ],
+      ),
+    );
+  }
 
   Widget _buildChartTab(List<Expense> expenses, Map<String, String> emailToName) {
     if (expenses.isEmpty) {
@@ -2447,7 +3103,7 @@ void showEditExpenseDialog(
       final email = totals.keys.first;
       return Center(
         child: Text(
-          '${email.split("@").first}\n${totals.values.first.toStringAsFixed(2)} TL ödedi',
+          '${resolveDisplayName(email, emailToName)}\n${totals.values.first.toStringAsFixed(2)} ${expenses.first.currency} ödedi',
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
@@ -2561,7 +3217,7 @@ void showEditExpenseDialog(
                     radius: 20,
                     backgroundColor: colors[i % colors.length],
                     child: Text(
-                      displayNameForEmail(entry.key, emailToName)
+                      resolveDisplayName(entry.key, emailToName)
                         .substring(0, 1).toUpperCase(),
                       style: const TextStyle(
                         color: Colors.white,
@@ -2574,7 +3230,7 @@ void showEditExpenseDialog(
 
                   Expanded(
                     child: Text(
-                        displayNameForEmail(entry.key, emailToName),
+                        resolveDisplayName(entry.key, emailToName),
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -2675,14 +3331,10 @@ void showEditExpenseDialog(
               'amount': data['amount'] ?? 0,
               'createdAt': data['createdAt'],
               'currency': data['currency'] ?? 'TRY',
-
-              // PDF için gerekli ek alanlar
-              'paidBy': data['paidBy'] ?? data['payer'] ?? data['odeyen'] ?? '',
-              'splitType': data['splitType'] ?? data['bolusumTipi'] ?? 'Eşit Böl',
-              'participants': data['participants'] ??
-                  data['katilanlar'] ??
-                  data['selectedParticipants'] ??
-                  [],
+              'paidBy': data['paidByEmail'] ?? data['paidBy'] ?? '',
+              'splitType': data['splitType'] ?? 'equal',
+              'participants': data['participants'] ?? [],
+              'shares': data['shares'] ?? {},
             };
           }).toList();    
             return StreamBuilder<QuerySnapshot>(
@@ -2732,6 +3384,7 @@ void showEditExpenseDialog(
                                     context: context,
                                     groupName: widget.groupName,
                                     expenses: pdfExpenses,
+                                    emailToName: emailToName,
                                   );
                                 },
                               ),
@@ -2857,7 +3510,7 @@ void showEditExpenseDialog(
                             child: TabBarView(
                             children: [
                               _buildExpensesTab(firebaseExpenses, memberEmails, emailToName),
-                              _buildMembersTab(memberEmails, emailToName, emailToDocId),
+                              _buildMembersTab(memberEmails, emailToName, emailToDocId, _isOwner),
                               _buildDebtsTab(memberEmails, emailToName, balances, debts, groupCurrency),
                               _buildChartTab(firebaseExpenses, emailToName),
                               _buildPaymentsHistoryTab(payments, emailToName),
@@ -2868,7 +3521,7 @@ void showEditExpenseDialog(
                       ],
                     ),
                     floatingActionButton: FloatingActionButton(
-                      onPressed: () => showAddExpenseDialog(memberEmails),
+                      onPressed: () => showAddExpenseDialog(memberEmails, emailToName),
                       child: const Icon(Icons.add),
                     ),
                   ),
@@ -2892,7 +3545,7 @@ void showEditExpenseDialog(
 
   return ListView(
     children: firebaseExpenses.map((expense) {
-      final payerName = displayNameForEmail(expense.paidBy, emailToName);
+      final payerName = resolveDisplayName(expense.paidBy, emailToName);
 
       return Card(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -2924,7 +3577,7 @@ void showEditExpenseDialog(
               Text('Ödeyen: $payerName'),
               const SizedBox(height: 4),
               Text(
-                'Katılanlar: ${expense.participants.map((email) => displayNameForEmail(email, emailToName)).join(", ")}',
+                'Katılanlar: ${expense.participants.map((email) => resolveDisplayName(email, emailToName)).join(", ")}',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 12),
@@ -3091,6 +3744,7 @@ void showEditExpenseDialog(
     List<String> memberEmails,
     Map<String, String> emailToName,
     Map<String, String> emailToDocId,
+    bool isOwner,
   ) {
     return ListView(
       children: [
@@ -3102,6 +3756,19 @@ void showEditExpenseDialog(
             label: const Text('Anonim Üye Ekle'),
           ),
         ),
+        if (isOwner)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: OutlinedButton.icon(
+              onPressed: () => scanOrphanReferences(memberEmails),
+              icon: const Icon(Icons.search, color: Colors.deepOrange),
+              label: const Text('Yetim referansları tara',
+                  style: TextStyle(color: Colors.deepOrange)),
+              style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.deepOrange)),
+            ),
+          ),
+        const SizedBox(height: 8),
         const ListTile(
           title: Text('Üyeler'),
           subtitle: Text('Yeni üyeler ana sayfadaki grup kodu ile katılır.'),
@@ -3110,18 +3777,31 @@ void showEditExpenseDialog(
           const Padding(padding: EdgeInsets.all(16), child: Text('Henüz üye yok'))
         else
           ...memberEmails.map((email) {
-            final name = email.split("@").first;
+            final name = resolveDisplayName(email, emailToName);
+            final isAnon = email.startsWith('anonymous_');
             final docId = emailToDocId[email];
             return Card(
               margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: Colors.teal.shade100,
+                  backgroundColor: isAnon ? Colors.orange.shade100 : Colors.teal.shade100,
                   child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?'),
                 ),
                 title: Text(name),
-                subtitle: Text(email),
+                subtitle: Text(isAnon ? 'Anonim üye' : email),
+                trailing: (isAnon && isOwner)
+                    ? IconButton(
+                        icon: const Icon(Icons.merge_type, color: Colors.orange),
+                        tooltip: 'Gerçek üyeyle birleştir',
+                        onPressed: () => showMergeMemberDialog(
+                          anonEmail: email,
+                          anonDocId: docId ?? '',
+                          memberEmails: memberEmails,
+                          emailToName: emailToName,
+                        ),
+                      )
+                    : null,
                 onLongPress: () {
                   showDialog(
                     context: context,
@@ -3162,7 +3842,7 @@ void showEditExpenseDialog(
         const ListTile(title: Text('Borç / Alacak Durumu')),
         ...memberEmails.map((email) {
           final value = balances[email] ?? 0;
-          final name = displayNameForEmail(email, emailToName);
+          final name = resolveDisplayName(email, emailToName);
           Color color;
           String text;
           if (value > 0) {
@@ -3251,8 +3931,8 @@ void showEditExpenseDialog(
 
     return ListView(
       children: sortedPayments.map((payment) {
-        final fromName = displayNameForEmail(payment.fromEmail, emailToName);
-        final toName = displayNameForEmail(payment.toEmail, emailToName);
+        final fromName = resolveDisplayName(payment.fromEmail, emailToName);
+        final toName = resolveDisplayName(payment.toEmail, emailToName);
 
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
