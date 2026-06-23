@@ -930,6 +930,10 @@ class GroupDetailPage extends StatefulWidget {
 }
 
 class _GroupDetailPageState extends State<GroupDetailPage> {
+  String? _filterEmail;
+  String _roleFilter = 'all'; // 'all' | 'paid' | 'participant'
+  bool _sortNewestFirst = true;
+
   bool get _isOwner {
     final currentEmail =
         FirebaseAuth.instance.currentUser?.email?.trim().toLowerCase() ?? '';
@@ -3534,6 +3538,39 @@ void showEditExpenseDialog(
     );
   }
 
+  Widget _roleChip(String value, String label, IconData icon) {
+    final selected = _roleFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _roleFilter = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? Colors.teal : Colors.teal.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? Colors.teal : Colors.teal.withOpacity(0.3),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: selected ? Colors.white : Colors.teal),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : Colors.teal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildExpensesTab(
   List<Expense> firebaseExpenses,
   List<String> memberEmails,
@@ -3543,8 +3580,148 @@ void showEditExpenseDialog(
     return const Center(child: Text('Henüz harcama yok 💸'));
   }
 
-  return ListView(
-    children: firebaseExpenses.map((expense) {
+  // Sort
+  final sorted = [...firebaseExpenses];
+  sorted.sort((a, b) {
+    final da = a.createdAt ?? DateTime(0);
+    final db = b.createdAt ?? DateTime(0);
+    return _sortNewestFirst ? db.compareTo(da) : da.compareTo(db);
+  });
+
+  // Filter by person + role
+  final filtered = _filterEmail == null
+      ? sorted
+      : sorted.where((e) {
+          final paid = e.paidBy == _filterEmail;
+          final participated = e.participants.contains(_filterEmail);
+          if (_roleFilter == 'paid') return paid;
+          if (_roleFilter == 'participant') return participated && !paid;
+          return paid || participated;
+        }).toList();
+
+  return Column(
+    children: [
+      // Filter bar
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        child: Row(
+          children: [
+            // Person filter
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String?>(
+                    value: _filterEmail,
+                    isExpanded: true,
+                    hint: const Text('Kişi filtrele', style: TextStyle(fontSize: 13)),
+                    icon: const Icon(Icons.person_search, color: Colors.teal, size: 20),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Tümü', style: TextStyle(fontSize: 13)),
+                      ),
+                      ...memberEmails.map((email) => DropdownMenuItem<String?>(
+                        value: email,
+                        child: Text(
+                          resolveDisplayName(email, emailToName),
+                          style: const TextStyle(fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      )),
+                    ],
+                    onChanged: (val) => setState(() {
+                      _filterEmail = val;
+                      _roleFilter = 'all';
+                    }),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Sort toggle
+            GestureDetector(
+              onTap: () => setState(() => _sortNewestFirst = !_sortNewestFirst),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _sortNewestFirst ? Icons.arrow_downward : Icons.arrow_upward,
+                      size: 16,
+                      color: Colors.teal,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _sortNewestFirst ? 'Yeni' : 'Eski',
+                      style: const TextStyle(fontSize: 12, color: Colors.teal, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      // Active filter chip + role segment
+      if (_filterEmail != null) ...[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+          child: Row(
+            children: [
+              Chip(
+                label: Text(
+                  resolveDisplayName(_filterEmail!, emailToName),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                avatar: const Icon(Icons.person, size: 14),
+                deleteIcon: const Icon(Icons.close, size: 14),
+                onDeleted: () => setState(() {
+                  _filterEmail = null;
+                  _roleFilter = 'all';
+                }),
+                backgroundColor: Colors.teal.withOpacity(0.12),
+                side: BorderSide.none,
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${filtered.length} harcama',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+          child: Row(
+            children: [
+              _roleChip('all', 'Tümü', Icons.list),
+              const SizedBox(width: 6),
+              _roleChip('paid', 'Ödedi', Icons.payments_outlined),
+              const SizedBox(width: 6),
+              _roleChip('participant', 'Katıldı', Icons.group_outlined),
+            ],
+          ),
+        ),
+      ],
+      // Expense list
+      Expanded(
+        child: filtered.isEmpty
+            ? const Center(child: Text('Bu kişiye ait harcama bulunamadı.'))
+            : ListView(
+                children: filtered.map((expense) {
       final payerName = resolveDisplayName(expense.paidBy, emailToName);
 
       return Card(
@@ -3736,8 +3913,11 @@ void showEditExpenseDialog(
           },
         ),
       );
-    }).toList(),
-  );
+                }).toList(),
+              ),
+            ),
+      ],
+    );
 }
 
   Widget _buildMembersTab(
