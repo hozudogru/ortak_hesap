@@ -74,5 +74,8 @@
 
 	<key>NSPhotoLibraryAddUsageDescription</key>
 		<string>Bu uygulama fotoğrafları galeriye kaydetmek için izin ister.</string>
+
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
