@@ -13,8 +13,10 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'dart:io';
+
+import 'l10n/app_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -110,6 +112,23 @@ class MyApp extends StatelessWidget {
   },
 
   title: 'Ortak Hesap',
+  onGenerateTitle: (context) => AppLocalizations.of(context).t('app_title'),
+
+  localizationsDelegates: const [
+    AppLocalizations.delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+  ],
+  supportedLocales: const [Locale('tr'), Locale('en'), Locale('de')],
+  localeResolutionCallback: (locale, supportedLocales) {
+    if (locale != null) {
+      for (final supported in supportedLocales) {
+        if (supported.languageCode == locale.languageCode) return supported;
+      }
+    }
+    return const Locale('tr');
+  },
 
   theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6C63FF)),
@@ -232,14 +251,15 @@ class _HomePageState extends State<HomePage> {
     context: context,
     builder: (context) {
       return AlertDialog(
-        title: const Text("Yeni Bildirimler"),
+        title: Text(AppLocalizations.of(context).t('home_new_notifications_title')),
         content: Text(
-          "${snapshot.docs.length} yeni bildirimin var.",
+          AppLocalizations.of(context).t('home_new_notifications_body',
+              {'count': snapshot.docs.length.toString()}),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Sonra Bak"),
+            child: Text(AppLocalizations.of(context).t('home_notif_later')),
           ),
           ElevatedButton(
             onPressed: () {
@@ -251,7 +271,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               );
             },
-            child: const Text("Bildirimleri Aç"),
+            child: Text(AppLocalizations.of(context).t('home_notif_open')),
           ),
         ],
       );
@@ -313,7 +333,7 @@ class _HomePageState extends State<HomePage> {
     if (groupQuery.docs.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Grup kodu bulunamadı')),
+        SnackBar(content: Text(AppLocalizations.of(context).t('home_group_code_not_found'))),
       );
       return;
     }
@@ -326,7 +346,7 @@ class _HomePageState extends State<HomePage> {
     if (memberIds.contains(user.uid)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Zaten bu gruptasın')),
+        SnackBar(content: Text(AppLocalizations.of(context).t('home_already_in_group'))),
       );
       return;
     }
@@ -346,7 +366,7 @@ class _HomePageState extends State<HomePage> {
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Gruba katıldın')),
+      SnackBar(content: Text(AppLocalizations.of(context).t('home_joined_group'))),
     );
   }
 
@@ -361,39 +381,40 @@ class _HomePageState extends State<HomePage> {
     showDialog(
       context: context,
       builder: (context) {
+        final loc = AppLocalizations.of(context);
         return AlertDialog(
-            title: const Text("Yeni Grup"),
+            title: Text(loc.t('home_new_group_title')),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   onChanged: (value) => newGroup = value,
-                  decoration: const InputDecoration(
-                    labelText: "Grup adı",
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: loc.t('home_group_name_label'),
+                    border: const OutlineInputBorder(),
                   ),
                 ),
 
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
 
                 DropdownButtonFormField<String>(
                   value: selectedCurrency,
-                  decoration: const InputDecoration(
-                    labelText: "Para Birimi",
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: loc.t('home_currency_label'),
+                    border: const OutlineInputBorder(),
                   ),
-                  items: const [
+                  items: [
                     DropdownMenuItem(
                       value: 'TRY',
-                      child: Text('TRY - Türk Lirası'),
+                      child: Text(loc.t('home_currency_try')),
                     ),
                     DropdownMenuItem(
                       value: 'USD',
-                      child: Text('USD - Amerikan Doları'),
+                      child: Text(loc.t('home_currency_usd')),
                     ),
                     DropdownMenuItem(
                       value: 'EUR',
-                      child: Text('EUR - Euro'),
+                      child: Text(loc.t('home_currency_eur')),
                     ),
                   ],
                   onChanged: (value) {
@@ -408,7 +429,7 @@ class _HomePageState extends State<HomePage> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text("İptal"),
+                child: Text(loc.t('common_cancel')),
               ),
 
               ElevatedButton(
@@ -422,7 +443,7 @@ class _HomePageState extends State<HomePage> {
                     if (context.mounted) Navigator.pop(context);
                   }
                 },
-                child: const Text("Oluştur"),
+                child: Text(loc.t('common_create')),
               ),
             ],
           );
@@ -436,17 +457,18 @@ class _HomePageState extends State<HomePage> {
     showDialog(
       context: context,
       builder: (context) {
+        final loc = AppLocalizations.of(context);
         return AlertDialog(
-          title: const Text('Gruba Katıl'),
+          title: Text(loc.t('home_join_group_title')),
           content: TextField(
             keyboardType: TextInputType.number,
             onChanged: (value) => code = value,
-            decoration: const InputDecoration(hintText: 'Grup kodunu gir'),
+            decoration: InputDecoration(hintText: loc.t('home_group_code_hint')),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('İptal'),
+              child: Text(loc.t('common_cancel')),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -455,7 +477,7 @@ class _HomePageState extends State<HomePage> {
                 }
                 if (context.mounted) Navigator.pop(context);
               },
-              child: const Text('Katıl'),
+              child: Text(loc.t('common_join')),
             ),
           ],
         );
@@ -523,9 +545,9 @@ class _HomePageState extends State<HomePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Hoş geldin',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    Text(
+                      AppLocalizations.of(context).t('home_welcome'),
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
                     ),
                     Text(
                       name,
@@ -542,12 +564,12 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               IconButton(
-                tooltip: 'Gruba katıl',
+                tooltip: AppLocalizations.of(context).t('home_join_group_tooltip'),
                 icon: const Icon(Icons.group_add, color: Colors.teal),
                 onPressed: showJoinGroupDialog,
               ),
               IconButton(
-                tooltip: "QR ile katıl",
+                tooltip: AppLocalizations.of(context).t('home_qr_join_tooltip'),
                 icon: const Icon(Icons.qr_code_scanner, color: Colors.teal),
                 onPressed: () async {
                   final code = await Navigator.push<String>(
@@ -631,7 +653,7 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ortak Hesap'),
+        title: Text(AppLocalizations.of(context).t('app_title')),
         actions: [
           IconButton(
             icon: const Icon(Icons.group_add),
@@ -646,7 +668,7 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       body: currentUser == null
-          ? const Center(child: Text('Kullanıcı bulunamadı'))
+          ? Center(child: Text(AppLocalizations.of(context).t('home_user_not_found')))
           : StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('groups')
@@ -685,9 +707,9 @@ class _HomePageState extends State<HomePage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text(
-                              'Gruplarım',
-                              style: TextStyle(
+                            Text(
+                              AppLocalizations.of(context).t('home_my_groups'),
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 26,
                                 fontWeight: FontWeight.bold,
@@ -697,7 +719,7 @@ class _HomePageState extends State<HomePage> {
                             const SizedBox(height: 10),
 
                             Text(
-                              'Ortak harcamalarını kolayca takip et',
+                              AppLocalizations.of(context).t('home_subtitle'),
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.85),
                                 fontSize: 14,
@@ -710,7 +732,7 @@ class _HomePageState extends State<HomePage> {
                               children: [
                                 Expanded(
                                   child: _dashboardCard(
-                                    title: 'Aktif Grup',
+                                    title: AppLocalizations.of(context).t('home_active_group'),
                                     value: docs.length.toString(),
                                     icon: Icons.group,
                                   ),
@@ -720,8 +742,8 @@ class _HomePageState extends State<HomePage> {
 
                                 Expanded(
                                   child: _dashboardCard(
-                                    title: 'Durum',
-                                    value: 'Güncel',
+                                    title: AppLocalizations.of(context).t('home_status'),
+                                    value: AppLocalizations.of(context).t('home_status_current'),
                                     icon: Icons.check_circle,
                                   ),
                                 ),
@@ -737,11 +759,11 @@ class _HomePageState extends State<HomePage> {
    
                     Expanded(
                       child: docs.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
-                                'Henüz grup yok.\nYeni grup eklemek için + butonuna bas veya grup kodu ile katıl.',
+                                AppLocalizations.of(context).t('home_no_groups'),
                                 textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 16),
+                                style: const TextStyle(fontSize: 16),
                               ),
                             )
                           : ListView.builder(
@@ -789,8 +811,8 @@ class _HomePageState extends State<HomePage> {
                                     ),
                                     subtitle: Text(
                                       groupCode.isEmpty
-                                          ? 'Grup detaylarını görüntüle'
-                                          : 'Grup kodu: $groupCode',
+                                          ? AppLocalizations.of(context).t('home_view_details')
+                                          : AppLocalizations.of(context).t('home_group_code_prefix', {'code': groupCode}),
                                     ),
                                     trailing: PopupMenuButton<String>(
                                       icon: const Icon(Icons.more_vert),
@@ -800,16 +822,16 @@ class _HomePageState extends State<HomePage> {
                                         if (value == 'copy') {
                                           Clipboard.setData(ClipboardData(text: groupCode));
                                           ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text('Kod kopyalandı: $groupCode')),
+                                            SnackBar(content: Text(AppLocalizations.of(context).t('home_code_copied', {'code': groupCode}))),
                                           );
                                         }
 
                                         if (value == 'share') {
-                                          Share.share('Gruba katıl!\nKod: $groupCode');
+                                          Share.share(AppLocalizations.of(context).t('home_share_join_text', {'code': groupCode}));
                                         }
 
                                         if (value == 'whatsapp') {
-                                          Share.share('Ortak hesap grubuma katıl 👇\nKod: $groupCode');
+                                          Share.share(AppLocalizations.of(context).t('home_share_whatsapp_text', {'code': groupCode}));
                                         }
 
                                         if (value == 'qr') {
@@ -824,14 +846,14 @@ class _HomePageState extends State<HomePage> {
                                           );
                                         }
                                       },
-                                      itemBuilder: (context) => const [
+                                      itemBuilder: (context) => [
                                         PopupMenuItem(
                                           value: 'copy',
                                           child: Row(
                                             children: [
-                                              Icon(Icons.copy, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('Kopyala'),
+                                              const Icon(Icons.copy, size: 18),
+                                              const SizedBox(width: 8),
+                                              Text(AppLocalizations.of(context).t('home_menu_copy')),
                                             ],
                                           ),
                                         ),
@@ -839,9 +861,9 @@ class _HomePageState extends State<HomePage> {
                                           value: 'share',
                                           child: Row(
                                             children: [
-                                              Icon(Icons.share, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('Paylaş'),
+                                              const Icon(Icons.share, size: 18),
+                                              const SizedBox(width: 8),
+                                              Text(AppLocalizations.of(context).t('home_menu_share')),
                                             ],
                                           ),
                                         ),
@@ -849,9 +871,9 @@ class _HomePageState extends State<HomePage> {
                                           value: 'whatsapp',
                                           child: Row(
                                             children: [
-                                              Icon(Icons.chat, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('WhatsApp ile gönder'),
+                                              const Icon(Icons.chat, size: 18),
+                                              const SizedBox(width: 8),
+                                              Text(AppLocalizations.of(context).t('home_menu_whatsapp')),
                                             ],
                                           ),
                                         ),
@@ -859,9 +881,9 @@ class _HomePageState extends State<HomePage> {
                                           value: 'qr',
                                           child: Row(
                                             children: [
-                                              Icon(Icons.qr_code, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('QR Göster'),
+                                              const Icon(Icons.qr_code, size: 18),
+                                              const SizedBox(width: 8),
+                                              Text(AppLocalizations.of(context).t('home_menu_qr')),
                                             ],
                                           ),
                                         ),
@@ -877,19 +899,19 @@ class _HomePageState extends State<HomePage> {
                                         context: context,
                                         builder: (context) {
                                           return AlertDialog(
-                                            title: const Text('Grubu Sil'),
-                                            content: Text('$groupName silinsin mi?'),
+                                            title: Text(AppLocalizations.of(context).t('home_delete_group_title')),
+                                            content: Text(AppLocalizations.of(context).t('home_delete_group_confirm', {'name': groupName})),
                                             actions: [
                                               TextButton(
                                                 onPressed: () => Navigator.pop(context),
-                                                child: const Text('İptal'),
+                                                child: Text(AppLocalizations.of(context).t('common_cancel')),
                                               ),
                                               ElevatedButton(
                                                 onPressed: () async {
                                                   await deleteGroupFromFirebase(groupName);
                                                   if (context.mounted) Navigator.pop(context);
                                                 },
-                                                child: const Text('Sil'),
+                                                child: Text(AppLocalizations.of(context).t('common_delete')),
                                               ),
                                             ],
                                           );
@@ -971,12 +993,12 @@ void showAddAnonymousMemberDialog() {
     context: context,
     builder: (context) {
       return AlertDialog(
-        title: const Text('Anonim Üye Ekle'),
+        title: Text(AppLocalizations.of(context).t('member_add_anonymous_title')),
         content: TextField(
           autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Üye adı',
-            hintText: 'Örn: Ali',
+          decoration: InputDecoration(
+            labelText: AppLocalizations.of(context).t('member_name_label'),
+            hintText: AppLocalizations.of(context).t('member_name_hint'),
           ),
           onChanged: (value) {
             name = value;
@@ -985,7 +1007,7 @@ void showAddAnonymousMemberDialog() {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('İptal'),
+            child: Text(AppLocalizations.of(context).t('common_cancel')),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -997,7 +1019,7 @@ void showAddAnonymousMemberDialog() {
                 Navigator.pop(context);
               }
             },
-            child: const Text('Ekle'),
+            child: Text(AppLocalizations.of(context).t('common_add')),
           ),
         ],
       );
@@ -1039,6 +1061,7 @@ void showAddAnonymousMemberDialog() {
 
   final fontData = await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
   final ttf = pw.Font.ttf(fontData);
+  final loc = AppLocalizations.of(context);
 
   double readAmount(Map<String, dynamic> item) {
     final value = item['tutar'] ??
@@ -1221,7 +1244,7 @@ while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
                 ),
                 pw.SizedBox(height: 4),
                 pw.Text(
-                  'Ortak Hesap PDF Raporu',
+                  loc.t('pdf_report_title'),
                   style: const pw.TextStyle(
                     fontSize: 10,
                     color: PdfColors.grey700,
@@ -1229,7 +1252,7 @@ while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
                 ),
                 pw.SizedBox(height: 3),
                 pw.Text(
-                  'Rapor Tarihi: ${DateTime.now().toString().substring(0, 16)}',
+                  loc.t('pdf_report_date', {'date': DateTime.now().toString().substring(0, 16)}),
                   style: const pw.TextStyle(
                     fontSize: 9,
                     color: PdfColors.grey600,
@@ -1244,17 +1267,17 @@ while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
           pw.Row(
             children: [
               _pdfSummaryBox(
-                title: 'Toplam Harcama',
+                title: loc.t('pdf_total_expense'),
                 value: '${totalExpense.toStringAsFixed(2)} TRY',
               ),
               pw.SizedBox(width: 10),
               _pdfSummaryBox(
-                title: 'Katılımcı Sayısı',
+                title: loc.t('pdf_participant_count'),
                 value: participantCount.toString(),
               ),
               pw.SizedBox(width: 10),
               _pdfSummaryBox(
-                title: 'Kişi Başı',
+                title: loc.t('pdf_per_person'),
                 value: '${perPersonAmount.toStringAsFixed(2)} TRY',
               ),
             ],
@@ -1263,7 +1286,7 @@ while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
           pw.SizedBox(height: 24),
 
           pw.Text(
-            'Harcamalar',
+            loc.t('pdf_expenses_heading'),
             style: pw.TextStyle(
               fontSize: 18,
               fontWeight: pw.FontWeight.bold,
@@ -1274,7 +1297,7 @@ while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
 
           if (expenses.isEmpty)
             pw.Text(
-              'Henüz harcama bulunmamaktadır.',
+              loc.t('pdf_no_expenses'),
               style: const pw.TextStyle(fontSize: 11),
             ),
 
@@ -1289,7 +1312,7 @@ while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
                 'ad',
                 'description',
               ],
-              defaultValue: 'Harcama',
+              defaultValue: loc.t('pdf_expense_default_title'),
             );
 
             final amount = readAmount(expense);
@@ -1313,12 +1336,12 @@ while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
                 'bölüşümTipi',
                 'divisionType',
               ],
-              defaultValue: 'Eşit Böl',
+              defaultValue: 'equal',
             );
               final splitTypeText = splitType == 'custom'
-                  ? 'Özel Bölüşüm'
+                  ? loc.t('pdf_split_custom')
                   : splitType == 'equal'
-                      ? 'Eşit Böl'
+                      ? loc.t('pdf_split_equal')
                       : splitType;
             final participantsList = readParticipants(expense);
 
@@ -1366,10 +1389,10 @@ while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
                     ],
                   ),
                   pw.SizedBox(height: 8),
-                  _pdfInfoRow('Ödeyen', dn(paidBy)),
-                  _pdfInfoRow('Bölüşüm Tipi', splitTypeText),
-                  _pdfInfoRow('Katılanlar', participants),
-                  _pdfInfoRow('Tarih', date),
+                  _pdfInfoRow(loc.t('pdf_paid_by'), dn(paidBy)),
+                  _pdfInfoRow(loc.t('pdf_split_type'), splitTypeText),
+                  _pdfInfoRow(loc.t('pdf_participants'), participants),
+                  _pdfInfoRow(loc.t('pdf_date'), date),
                 ],
               ),
             );
@@ -1378,7 +1401,7 @@ while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
           pw.SizedBox(height: 18),
 
           pw.Text(
-            'Katılımcılar',
+            loc.t('pdf_participants_heading'),
             style: pw.TextStyle(
               fontSize: 18,
               fontWeight: pw.FontWeight.bold,
@@ -1389,7 +1412,7 @@ while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
 
           if (allParticipants.isEmpty)
             pw.Text(
-              'Katılımcı bilgisi bulunmamaktadır.',
+              loc.t('pdf_no_participants'),
               style: const pw.TextStyle(fontSize: 11),
             )
           else
@@ -1416,7 +1439,7 @@ while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
 pw.SizedBox(height: 12),
 
 pw.Text(
-  'Ödeme Planı',
+  loc.t('pdf_payment_plan'),
   style: pw.TextStyle(
     fontSize: 18,
     fontWeight: pw.FontWeight.bold,
@@ -1436,7 +1459,7 @@ if (paymentPlan.isEmpty)
       borderRadius: pw.BorderRadius.circular(7),
     ),
     child: pw.Text(
-      'Ödeme planı oluşturulacak borç/alacak bilgisi bulunmamaktadır.',
+      loc.t('pdf_no_payment_plan'),
       style: const pw.TextStyle(fontSize: 10),
     ),
   )
@@ -1457,7 +1480,7 @@ else
           borderRadius: pw.BorderRadius.circular(7),
         ),
         child: pw.Text(
-          '$from, $to kişisine ${amount.toStringAsFixed(2)} TRY ödeyecek.',
+          loc.t('pdf_payment_line', {'from': from, 'to': to, 'amount': '${amount.toStringAsFixed(2)} TRY'}),
           style: const pw.TextStyle(fontSize: 10),
         ),
       );
@@ -1466,7 +1489,7 @@ else
           pw.SizedBox(height: 22),
 
           pw.Text(
-            'Özet',
+            loc.t('pdf_summary'),
             style: pw.TextStyle(
               fontSize: 15,
               fontWeight: pw.FontWeight.bold,
@@ -1487,25 +1510,25 @@ else
           color: PdfColors.grey200,
         ),
         children: [
-          _pdfTableCell('Bilgi', isHeader: true),
-          _pdfTableCell('Değer', isHeader: true),
+          _pdfTableCell(loc.t('pdf_info'), isHeader: true),
+          _pdfTableCell(loc.t('pdf_value'), isHeader: true),
         ],
       ),
       pw.TableRow(
         children: [
-          _pdfTableCell('Toplam Harcama'),
+          _pdfTableCell(loc.t('pdf_total_expense')),
           _pdfTableCell('${totalExpense.toStringAsFixed(2)} TRY'),
         ],
       ),
       pw.TableRow(
         children: [
-          _pdfTableCell('Katılımcı Sayısı'),
+          _pdfTableCell(loc.t('pdf_participant_count')),
           _pdfTableCell(participantCount.toString()),
         ],
       ),
       pw.TableRow(
         children: [
-          _pdfTableCell('Kişi Başı Ortalama'),
+          _pdfTableCell(loc.t('pdf_per_person_avg')),
           _pdfTableCell('${perPersonAmount.toStringAsFixed(2)} TRY'),
         ],
       ),
@@ -1524,8 +1547,8 @@ else
 if (!mounted) return;
 
 ScaffoldMessenger.of(context).showSnackBar(
-  const SnackBar(
-    content: Text('PDF raporu oluşturuldu.'),
+  SnackBar(
+    content: Text(AppLocalizations.of(context).t('pdf_generated_snackbar')),
   ),
 );
 }
@@ -1625,7 +1648,7 @@ pw.Widget _pdfTableCell(
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Ödeme kaydedildi')),
+      SnackBar(content: Text(AppLocalizations.of(context).t('payment_recorded'))),
     );
   }
 
@@ -1639,11 +1662,12 @@ pw.Widget _pdfTableCell(
     final cleanToEmail = toEmail.trim().toLowerCase();
     final cleanFromEmail = user.email?.trim().toLowerCase() ?? '';
 
+    final loc = AppLocalizations.of(context);
     await FirebaseFirestore.instance.collection('notificationRequests').add({
       'toEmail': cleanToEmail,
       'fromEmail': cleanFromEmail,
-      'title': 'Borç Hatırlatma',
-      'body': '$cleanFromEmail senden $amount ödeme yapmanı hatırlatıyor.',
+      'title': loc.t('debt_reminder_title'),
+      'body': loc.t('debt_reminder_body', {'from': cleanFromEmail, 'amount': amount}),
       'createdAt': FieldValue.serverTimestamp(),
       'status': 'pending',
       'isRead': false,
@@ -1716,7 +1740,7 @@ pw.Widget _pdfTableCell(
 
   if (memberEmails.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Önce üye eklemelisin')),
+      SnackBar(content: Text(AppLocalizations.of(context).t('expense_need_members_first'))),
     );
     return;
   }
@@ -1771,9 +1795,9 @@ pw.Widget _pdfTableCell(
 
                   const SizedBox(height: 18),
 
-                  const Text(
-                    'Harcama Ekle',
-                    style: TextStyle(
+                  Text(
+                    AppLocalizations.of(context).t('expense_add_title'),
+                    style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                     ),
@@ -1785,7 +1809,7 @@ pw.Widget _pdfTableCell(
                     controller: titleController,
                     onChanged: (value) => title = value,
                     decoration: InputDecoration(
-                      labelText: 'Harcama adı',
+                      labelText: AppLocalizations.of(context).t('expense_name_label'),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -1799,7 +1823,7 @@ pw.Widget _pdfTableCell(
                     keyboardType: TextInputType.number,
                     onChanged: (value) => amount = value,
                     decoration: InputDecoration(
-                      labelText: 'Tutar ($groupCurrency)',
+                      labelText: AppLocalizations.of(context).t('expense_amount_label', {'currency': groupCurrency}),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -1813,7 +1837,7 @@ pw.Widget _pdfTableCell(
                         ? selectedPaidBy
                         : (memberEmails.isNotEmpty ? memberEmails.first : null),
                     decoration: InputDecoration(
-                      labelText: "Ödeyen",
+                      labelText: AppLocalizations.of(context).t('expense_paid_by_label'),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -1838,23 +1862,23 @@ pw.Widget _pdfTableCell(
                   DropdownButtonFormField<String>(
                     value: splitType,
                     decoration: InputDecoration(
-                      labelText: "Bölüşüm Tipi",
+                      labelText: AppLocalizations.of(context).t('expense_split_type_label'),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    items: const [
+                    items: [
                       DropdownMenuItem(
                         value: "equal",
-                        child: Text("Eşit Böl"),
+                        child: Text(AppLocalizations.of(context).t('expense_split_equal')),
                       ),
                       DropdownMenuItem(
                         value: "custom",
-                        child: Text("Kişiye Göre Tutar"),
+                        child: Text(AppLocalizations.of(context).t('expense_split_custom')),
                       ),
                       DropdownMenuItem(
                         value: "weighted",
-                        child: Text("Paya Göre"),
+                        child: Text(AppLocalizations.of(context).t('expense_split_weighted')),
                       ),
                     ],
                     onChanged: (value) {
@@ -1870,31 +1894,31 @@ pw.Widget _pdfTableCell(
                   DropdownButtonFormField<String>(
                     value: selectedCategory,
                     decoration: InputDecoration(
-                      labelText: "Kategori",
+                      labelText: AppLocalizations.of(context).t('expense_category_label'),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    items: const [
+                    items: [
                       DropdownMenuItem(
                         value: "general",
-                        child: Text("Genel"),
+                        child: Text(AppLocalizations.of(context).t('expense_category_general')),
                       ),
                       DropdownMenuItem(
                         value: "food",
-                        child: Text("Yemek"),
+                        child: Text(AppLocalizations.of(context).t('expense_category_food')),
                       ),
                       DropdownMenuItem(
                         value: "transport",
-                        child: Text("Ulaşım"),
+                        child: Text(AppLocalizations.of(context).t('expense_category_transport')),
                       ),
                       DropdownMenuItem(
                         value: "hotel",
-                        child: Text("Konaklama"),
+                        child: Text(AppLocalizations.of(context).t('expense_category_hotel')),
                       ),
                       DropdownMenuItem(
                         value: "market",
-                        child: Text("Market"),
+                        child: Text(AppLocalizations.of(context).t('expense_category_market')),
                       ),
                     ],
                     onChanged: (value) {
@@ -1907,9 +1931,9 @@ pw.Widget _pdfTableCell(
                   ),
                   const SizedBox(height: 16),
 
-                  const Text(
-                    'Kimler katıldı?',
-                    style: TextStyle(
+                  Text(
+                    AppLocalizations.of(context).t('expense_who_participated'),
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -1948,7 +1972,7 @@ pw.Widget _pdfTableCell(
                   if (splitType == "custom" || splitType == "weighted") ...[
                     const SizedBox(height: 12),
                     Text(
-                      splitType == "weighted" ? "Kişi Payları / Katsayıları" : "Kişi Payları",
+                      splitType == "weighted" ? AppLocalizations.of(context).t('expense_shares_weighted_label') : AppLocalizations.of(context).t('expense_shares_label'),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                       ),
@@ -1967,7 +1991,7 @@ pw.Widget _pdfTableCell(
                           controller: shareControllers[email],
                           keyboardType: TextInputType.number,
                           decoration: InputDecoration(
-                            labelText: "${email.split("@").first} payı",
+                            labelText: AppLocalizations.of(context).t('expense_share_for_label', {'name': email.split("@").first}),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
@@ -1984,7 +2008,7 @@ pw.Widget _pdfTableCell(
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => Navigator.pop(bottomSheetContext),
-                          child: const Text('İptal'),
+                          child: Text(AppLocalizations.of(context).t('common_cancel')),
                         ),
                       ),
 
@@ -2001,8 +2025,8 @@ pw.Widget _pdfTableCell(
                                 parsedAmount == null ||
                                 selectedParticipants.isEmpty) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Harcama adı, tutar ve katılımcılar zorunlu.'),
+                                SnackBar(
+                                  content: Text(AppLocalizations.of(context).t('expense_required_fields')),
                                 ),
                               );
                               return;
@@ -2020,7 +2044,7 @@ pw.Widget _pdfTableCell(
                                 if (value <= 0) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text("${email.split("@").first} için tutar gir"),
+                                      content: Text(AppLocalizations.of(context).t('expense_enter_amount_for', {'name': email.split("@").first})),
                                     ),
                                   );
                                   return;
@@ -2035,7 +2059,7 @@ pw.Widget _pdfTableCell(
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      "Kişi payları toplamı harcama tutarına eşit olmalı. Toplam: ${totalShares.toStringAsFixed(2)}",
+                                      AppLocalizations.of(context).t('expense_shares_sum_mismatch', {'total': totalShares.toStringAsFixed(2)}),
                                     ),
                                   ),
                                 );
@@ -2074,7 +2098,7 @@ pw.Widget _pdfTableCell(
                               Navigator.pop(bottomSheetContext);
                             }
                           },
-                          child: const Text('Ekle'),
+                          child: Text(AppLocalizations.of(context).t('common_add')),
                         ),
                       ),
                     ],
@@ -2120,7 +2144,7 @@ void showEditExpenseDialog(
       return StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
-            title: const Text('Harcama Düzenle'),
+            title: Text(AppLocalizations.of(context).t('expense_edit_title')),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -2128,8 +2152,8 @@ void showEditExpenseDialog(
                   TextField(
                     controller: titleController,
                     onChanged: (value) => title = value,
-                    decoration: const InputDecoration(
-                      hintText: 'Harcama adı',
+                    decoration: InputDecoration(
+                      hintText: AppLocalizations.of(context).t('expense_name_label'),
                     ),
                   ),
 
@@ -2137,8 +2161,8 @@ void showEditExpenseDialog(
                     controller: amountController,
                     keyboardType: TextInputType.number,
                     onChanged: (value) => amount = value,
-                    decoration: const InputDecoration(
-                      hintText: 'Tutar',
+                    decoration: InputDecoration(
+                      hintText: AppLocalizations.of(context).t('expense_amount_hint'),
                     ),
                   ),
 
@@ -2148,9 +2172,9 @@ void showEditExpenseDialog(
                     value: memberEmails.contains(selectedPaidBy)
                         ? selectedPaidBy
                         : (memberEmails.isNotEmpty ? memberEmails.first : null),
-                    decoration: const InputDecoration(
-                      labelText: "Ödeyen",
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: AppLocalizations.of(context).t('expense_paid_by_label'),
+                      border: const OutlineInputBorder(),
                     ),
                     items: memberEmails.map((email) {
                       return DropdownMenuItem(
@@ -2171,22 +2195,22 @@ void showEditExpenseDialog(
 
                   DropdownButtonFormField<String>(
                     value: splitType,
-                    decoration: const InputDecoration(
-                      labelText: "Bölüşüm Tipi",
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: AppLocalizations.of(context).t('expense_split_type_label'),
+                      border: const OutlineInputBorder(),
                     ),
-                    items: const [
+                    items: [
                       DropdownMenuItem(
                         value: "equal",
-                        child: Text("Eşit Böl"),
+                        child: Text(AppLocalizations.of(context).t('expense_split_equal')),
                       ),
                       DropdownMenuItem(
                         value: "custom",
-                        child: Text("Kişiye Göre Tutar"),
+                        child: Text(AppLocalizations.of(context).t('expense_split_custom')),
                       ),
                       DropdownMenuItem(
                         value: "weighted",
-                        child: Text("Paya Göre"),
+                        child: Text(AppLocalizations.of(context).t('expense_split_weighted')),
                       ),
                     ],
                     onChanged: (value) {
@@ -2200,11 +2224,11 @@ void showEditExpenseDialog(
 
                   const SizedBox(height: 12),
 
-                  const Align(
+                  Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Kimler katıldı?',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      AppLocalizations.of(context).t('expense_who_participated'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
 
@@ -2237,11 +2261,11 @@ void showEditExpenseDialog(
                   if (splitType == "custom" || splitType == "weighted") ...[
                     const SizedBox(height: 12),
 
-                    const Align(
+                    Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        "Kişi Payları",
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        AppLocalizations.of(context).t('expense_shares_label'),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
 
@@ -2261,8 +2285,7 @@ void showEditExpenseDialog(
                           controller: shareControllers[email],
                           keyboardType: TextInputType.number,
                           decoration: InputDecoration(
-                            labelText:
-                                "${resolveDisplayName(email, emailToName)} payı",
+                            labelText: AppLocalizations.of(context).t('expense_share_for_label', {'name': resolveDisplayName(email, emailToName)}),
                             border: const OutlineInputBorder(),
                           ),
                         ),
@@ -2275,7 +2298,7 @@ void showEditExpenseDialog(
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('İptal'),
+                child: Text(AppLocalizations.of(context).t('common_cancel')),
               ),
               ElevatedButton(
                 onPressed: () async {
@@ -2299,7 +2322,7 @@ void showEditExpenseDialog(
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                "${resolveDisplayName(email, emailToName)} için tutar gir",
+                                AppLocalizations.of(context).t('expense_enter_amount_for', {'name': resolveDisplayName(email, emailToName)}),
                               ),
                             ),
                           );
@@ -2314,7 +2337,7 @@ void showEditExpenseDialog(
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              "Kişi payları toplamı harcama tutarına eşit olmalı. Toplam: ${totalShares.toStringAsFixed(2)}",
+                              AppLocalizations.of(context).t('expense_shares_sum_mismatch', {'total': totalShares.toStringAsFixed(2)}),
                             ),
                           ),
                         );
@@ -2341,7 +2364,7 @@ void showEditExpenseDialog(
 
                   if (context.mounted) Navigator.pop(context);
                 },
-                child: const Text('Kaydet'),
+                child: Text(AppLocalizations.of(context).t('common_save')),
               ),
             ],
           );
@@ -2519,7 +2542,7 @@ void showEditExpenseDialog(
     if (anonEmail == targetEmail) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kaynak ve hedef üye aynı kişi.')));
+        SnackBar(content: Text(AppLocalizations.of(context).t('member_merge_same_person'))));
       return;
     }
     // Not: Hedef anonim olabilir — orphan merge senaryosunda hedef kayıtlı
@@ -2545,8 +2568,7 @@ void showEditExpenseDialog(
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
-          'Merge iptal: Mevcut gider verileri tutarsız '
-          '(bakiye Δ: ${preBalanceSum.toStringAsFixed(4)}).')));
+          AppLocalizations.of(context).t('member_merge_cancel_inconsistent', {'delta': preBalanceSum.toStringAsFixed(4)}))));
       return;
     }
 
@@ -2623,9 +2645,11 @@ void showEditExpenseDialog(
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(
-                'Merge iptal: "${data['title']}" giderinde shares toplamı '
-                '(${sharesSum.toStringAsFixed(2)}) tutarla '
-                '(${amount.toStringAsFixed(2)}) uyuşmuyor.')));
+                AppLocalizations.of(context).t('member_merge_cancel_shares_mismatch', {
+                  'title': '${data['title']}',
+                  'sum': sharesSum.toStringAsFixed(2),
+                  'amount': amount.toStringAsFixed(2),
+                }))));
             return;
           }
         }
@@ -2653,8 +2677,7 @@ void showEditExpenseDialog(
     if ((preTotalAmount - postTotalAmount).abs() > 0.01) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(
-          'Merge iptal: Toplam harcama tutarı değişiyor. Beklenmedik durum.')));
+        SnackBar(content: Text(AppLocalizations.of(context).t('member_merge_cancel_total_changed'))));
       return;
     }
 
@@ -2666,8 +2689,7 @@ void showEditExpenseDialog(
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
-          'Merge iptal: Bakiye dengesi bozuluyor '
-          '(Δ: ${postBalanceSum.toStringAsFixed(4)}). İşlem iptal edildi.')));
+          AppLocalizations.of(context).t('member_merge_cancel_balance_broken', {'delta': postBalanceSum.toStringAsFixed(4)}))));
       return;
     }
 
@@ -2705,8 +2727,7 @@ void showEditExpenseDialog(
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(
-        '${affectedBackup.length} gider güncellendi, '
-        'anonim üye birleştirildi.')));
+        AppLocalizations.of(context).t('member_merge_success', {'count': affectedBackup.length.toString()}))));
   }
 
   void showMergeMemberDialog({
@@ -2721,7 +2742,7 @@ void showEditExpenseDialog(
 
     if (realMembers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Birleştirmek için gerçek üye bulunamadı.')));
+        SnackBar(content: Text(AppLocalizations.of(context).t('member_merge_no_real_members'))));
       return;
     }
 
@@ -2731,20 +2752,19 @@ void showEditExpenseDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
-          title: const Text('Üye Birleştir'),
+          title: Text(AppLocalizations.of(ctx).t('member_merge_title')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '"${resolveDisplayName(anonEmail, emailToName)}" adlı anonim üyeyi '
-                'aşağıdaki gerçek üyeyle birleştir:'),
+                AppLocalizations.of(ctx).t('member_merge_desc', {'name': resolveDisplayName(anonEmail, emailToName)})),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: selectedTarget,
-                decoration: const InputDecoration(
-                  labelText: 'Hedef üye',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(ctx).t('member_merge_target_label'),
+                  border: const OutlineInputBorder(),
                 ),
                 items: realMembers.map((e) => DropdownMenuItem(
                   value: e,
@@ -2753,18 +2773,16 @@ void showEditExpenseDialog(
                 onChanged: (v) { if (v != null) setS(() => selectedTarget = v); },
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Bu işlem geri alınamaz.\n'
-                'Tüm giderlerdeki referanslar güncellenecek,\n'
-                'anonim üye kaydı silinecek.',
-                style: TextStyle(color: Colors.red, fontSize: 13),
+              Text(
+                AppLocalizations.of(ctx).t('member_merge_warning'),
+                style: const TextStyle(color: Colors.red, fontSize: 13),
               ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('İptal'),
+              child: Text(AppLocalizations.of(ctx).t('common_cancel')),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
@@ -2776,7 +2794,7 @@ void showEditExpenseDialog(
                   targetEmail: selectedTarget,
                 );
               },
-              child: const Text('Birleştir'),
+              child: Text(AppLocalizations.of(ctx).t('common_merge')),
             ),
           ],
         ),
@@ -2793,9 +2811,9 @@ void showEditExpenseDialog(
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Taranıyor...'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(AppLocalizations.of(context).t('diag_scanning')),
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -2811,9 +2829,9 @@ void showEditExpenseDialog(
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Diagnostic Hatası'),
-          content: Text('Giderler okunamadı:\n$e'),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Tamam'))],
+          title: Text(AppLocalizations.of(ctx).t('diag_error_title')),
+          content: Text(AppLocalizations.of(ctx).t('diag_expenses_read_failed', {'error': '$e'})),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(AppLocalizations.of(ctx).t('common_ok')))],
         ),
       );
       return;
@@ -2860,7 +2878,7 @@ void showEditExpenseDialog(
       }
 
       if (fields.isNotEmpty) {
-        matches.add('"${data['title'] ?? '(isimsiz)'}" [${fields.join(' | ')}]');
+        matches.add('"${data['title'] ?? AppLocalizations.of(context).t('diag_unnamed')}" [${fields.join(' | ')}]');
       }
     }
 
@@ -2877,20 +2895,20 @@ void showEditExpenseDialog(
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Diagnostic', style: TextStyle(fontSize: 16)),
+        title: Text(AppLocalizations.of(ctx).t('diag_title'), style: const TextStyle(fontSize: 16)),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Aranan: $target',
+              Text(AppLocalizations.of(ctx).t('diag_searched_for', {'target': target}),
                   style: const TextStyle(fontSize: 11, color: Colors.grey)),
               const SizedBox(height: 8),
-              Text('Giderlerde eşleşme (${matches.length}):',
+              Text(AppLocalizations.of(ctx).t('diag_matches_count', {'count': matches.length.toString()}),
                   style: const TextStyle(fontWeight: FontWeight.bold)),
               if (matches.isEmpty)
-                const Text('  ✓ Bulunamadı — email tamamen temizlenmiş.',
-                    style: TextStyle(color: Colors.green, fontSize: 12))
+                Text('  ${AppLocalizations.of(ctx).t('diag_no_matches')}',
+                    style: const TextStyle(color: Colors.green, fontSize: 12))
               else
                 ...matches.map((m) => Padding(
                       padding: const EdgeInsets.only(left: 8, top: 4),
@@ -2898,15 +2916,16 @@ void showEditExpenseDialog(
                     )),
               const Divider(height: 24),
               Text(
-                '_merge_backups (${backupInfo.length} kayıt)'
-                '${backupError != null ? " — HATA" : ""}:',
+                AppLocalizations.of(ctx).t('diag_backups_count', {'count': backupInfo.length.toString()}) +
+                (backupError != null ? AppLocalizations.of(ctx).t('diag_backups_error_suffix') : '') +
+                ':',
                 style: const TextStyle(fontWeight: FontWeight.bold)),
               if (backupError != null)
-                Text('  İzin hatası: $backupError',
+                Text('  ${AppLocalizations.of(ctx).t('diag_permission_error', {'error': backupError})}',
                     style: const TextStyle(color: Colors.orange, fontSize: 11))
               else if (backupInfo.isEmpty)
-                const Text('  Backup kaydı yok.',
-                    style: TextStyle(color: Colors.orange, fontSize: 12))
+                Text('  ${AppLocalizations.of(ctx).t('diag_no_backups')}',
+                    style: const TextStyle(color: Colors.orange, fontSize: 12))
               else
                 ...backupInfo.map((b) => Padding(
                       padding: const EdgeInsets.only(left: 8, top: 4),
@@ -2916,7 +2935,7 @@ void showEditExpenseDialog(
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Kapat')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(AppLocalizations.of(ctx).t('common_close'))),
         ],
       ),
     );
@@ -2965,7 +2984,7 @@ void showEditExpenseDialog(
 
     if (orphans.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Yetim referans bulunamadı.')));
+        SnackBar(content: Text(AppLocalizations.of(context).t('member_orphan_none'))));
       return;
     }
 
@@ -2992,7 +3011,7 @@ void showEditExpenseDialog(
         if (shareKeys.contains(orphan)) fields.add('shares');
 
         if (fields.isNotEmpty) {
-          final title = (data['title'] ?? '(isimsiz)').toString();
+          final title = (data['title'] ?? AppLocalizations.of(context).t('diag_unnamed')).toString();
           affected.add('"$title" [${fields.join(', ')}]');
         }
       }
@@ -3006,7 +3025,7 @@ void showEditExpenseDialog(
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Yetim Referanslar (${orphans.length})'),
+        title: Text(AppLocalizations.of(ctx).t('member_orphan_title', {'count': orphans.length.toString()})),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3037,9 +3056,9 @@ void showEditExpenseDialog(
                         DropdownButtonFormField<String>(
                           value: selectedTarget,
                           isDense: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Birleştir →',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: AppLocalizations.of(ctx2).t('member_orphan_merge_label'),
+                            border: const OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 6),
                           ),
@@ -3062,8 +3081,8 @@ void showEditExpenseDialog(
                                     horizontal: 10, vertical: 4)),
                             icon: const Icon(Icons.merge_type,
                                 size: 16, color: Colors.white),
-                            label: const Text('Birleştir',
-                                style: TextStyle(
+                            label: Text(AppLocalizations.of(ctx2).t('common_merge'),
+                                style: const TextStyle(
                                     fontSize: 12, color: Colors.white)),
                             onPressed: () async {
                               Navigator.pop(ctx);
@@ -3087,7 +3106,7 @@ void showEditExpenseDialog(
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Kapat')),
+              child: Text(AppLocalizations.of(ctx).t('common_close'))),
         ],
       ),
     );
@@ -3095,7 +3114,7 @@ void showEditExpenseDialog(
 
   Widget _buildChartTab(List<Expense> expenses, Map<String, String> emailToName) {
     if (expenses.isEmpty) {
-      return const Center(child: Text('Veri yok'));
+      return Center(child: Text(AppLocalizations.of(context).t('chart_no_data')));
     }
 
     final Map<String, double> totals = {};
@@ -3107,7 +3126,10 @@ void showEditExpenseDialog(
       final email = totals.keys.first;
       return Center(
         child: Text(
-          '${resolveDisplayName(email, emailToName)}\n${totals.values.first.toStringAsFixed(2)} ${expenses.first.currency} ödedi',
+          AppLocalizations.of(context).t('chart_single_payer', {
+            'name': resolveDisplayName(email, emailToName),
+            'amount': '${totals.values.first.toStringAsFixed(2)} ${expenses.first.currency}',
+          }),
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
@@ -3123,20 +3145,20 @@ void showEditExpenseDialog(
       child: Column(
         children: [
           Column(
-              children: const [
+              children: [
                 Text(
-                  "Kim Ne Kadar Ödedi",
+                  AppLocalizations.of(context).t('chart_who_paid_title'),
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                SizedBox(height: 6),
+                const SizedBox(height: 6),
                 Text(
-                  "Toplam harcamaya göre ödeme dağılımı",
+                  AppLocalizations.of(context).t('chart_subtitle'),
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 13,
                     color: Colors.grey,
                   ),
@@ -3173,9 +3195,9 @@ void showEditExpenseDialog(
                             size: 28,
                           ),
                           const SizedBox(height: 6),
-                          const Text(
-                            "Toplam",
-                            style: TextStyle(
+                          Text(
+                            AppLocalizations.of(context).t('chart_total'),
+                            style: const TextStyle(
                               color: Colors.grey,
                               fontSize: 13,
                             ),
@@ -3402,39 +3424,39 @@ void showEditExpenseDialog(
                           },
                         ),
                       ],
-                     bottom: const TabBar(
+                     bottom: TabBar(
                         indicatorColor: Colors.white,
                         labelColor: Colors.white,
                         unselectedLabelColor: Colors.white70,
-                        labelStyle: TextStyle(
+                        labelStyle: const TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                         ),
-                        unselectedLabelStyle: TextStyle(
+                        unselectedLabelStyle: const TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.w500,
                         ),
                         indicatorSize: TabBarIndicatorSize.tab,
                         tabs: [
                           Tab(
-                            icon: Icon(Icons.payments, size: 19),
-                            text: 'Gider',
+                            icon: const Icon(Icons.payments, size: 19),
+                            text: AppLocalizations.of(context).t('tab_expenses'),
                           ),
                           Tab(
-                            icon: Icon(Icons.people, size: 19),
-                            text: 'Üyeler',
+                            icon: const Icon(Icons.people, size: 19),
+                            text: AppLocalizations.of(context).t('tab_members'),
                           ),
                           Tab(
-                            icon: Icon(Icons.account_balance, size: 19),
-                            text: 'Borç',
+                            icon: const Icon(Icons.account_balance, size: 19),
+                            text: AppLocalizations.of(context).t('tab_debts'),
                           ),
                           Tab(
-                            icon: Icon(Icons.pie_chart, size: 19),
-                            text: 'Grafik',
+                            icon: const Icon(Icons.pie_chart, size: 19),
+                            text: AppLocalizations.of(context).t('tab_chart'),
                           ),
                           Tab(
-                            icon: Icon(Icons.history, size: 19),
-                            text: 'Geçmiş',
+                            icon: const Icon(Icons.history, size: 19),
+                            text: AppLocalizations.of(context).t('tab_history'),
                           ),
                         ],
                       ),
@@ -3454,8 +3476,8 @@ void showEditExpenseDialog(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        const Text(
-                                          "Toplam Harcama",
+                                        Text(
+                                          AppLocalizations.of(context).t('summary_total_expense'),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(color: Colors.grey),
@@ -3482,8 +3504,8 @@ void showEditExpenseDialog(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.end,
                                       children: [
-                                        const Text(
-                                          "Kişi Başı",
+                                        Text(
+                                          AppLocalizations.of(context).t('summary_per_person'),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(color: Colors.grey),
@@ -3577,7 +3599,7 @@ void showEditExpenseDialog(
   Map<String, String> emailToName,
 ) {
   if (firebaseExpenses.isEmpty) {
-    return const Center(child: Text('Henüz harcama yok 💸'));
+    return Center(child: Text(AppLocalizations.of(context).t('expense_none')));
   }
 
   // Sort
@@ -3619,12 +3641,12 @@ void showEditExpenseDialog(
                   child: DropdownButton<String?>(
                     value: _filterEmail,
                     isExpanded: true,
-                    hint: const Text('Kişi filtrele', style: TextStyle(fontSize: 13)),
+                    hint: Text(AppLocalizations.of(context).t('expense_filter_person_hint'), style: const TextStyle(fontSize: 13)),
                     icon: const Icon(Icons.person_search, color: Colors.teal, size: 20),
                     items: [
-                      const DropdownMenuItem<String?>(
+                      DropdownMenuItem<String?>(
                         value: null,
-                        child: Text('Tümü', style: TextStyle(fontSize: 13)),
+                        child: Text(AppLocalizations.of(context).t('expense_filter_all'), style: const TextStyle(fontSize: 13)),
                       ),
                       ...memberEmails.map((email) => DropdownMenuItem<String?>(
                         value: email,
@@ -3663,7 +3685,7 @@ void showEditExpenseDialog(
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      _sortNewestFirst ? 'Yeni' : 'Eski',
+                      _sortNewestFirst ? AppLocalizations.of(context).t('expense_sort_newest') : AppLocalizations.of(context).t('expense_sort_oldest'),
                       style: const TextStyle(fontSize: 12, color: Colors.teal, fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -3697,7 +3719,7 @@ void showEditExpenseDialog(
               ),
               const SizedBox(width: 8),
               Text(
-                '${filtered.length} harcama',
+                AppLocalizations.of(context).t('expense_count_suffix', {'count': filtered.length.toString()}),
                 style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ],
@@ -3707,11 +3729,11 @@ void showEditExpenseDialog(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
           child: Row(
             children: [
-              _roleChip('all', 'Tümü', Icons.list),
+              _roleChip('all', AppLocalizations.of(context).t('expense_role_all'), Icons.list),
               const SizedBox(width: 6),
-              _roleChip('paid', 'Ödedi', Icons.payments_outlined),
+              _roleChip('paid', AppLocalizations.of(context).t('expense_role_paid'), Icons.payments_outlined),
               const SizedBox(width: 6),
-              _roleChip('participant', 'Katıldı', Icons.group_outlined),
+              _roleChip('participant', AppLocalizations.of(context).t('expense_role_participant'), Icons.group_outlined),
             ],
           ),
         ),
@@ -3719,7 +3741,7 @@ void showEditExpenseDialog(
       // Expense list
       Expanded(
         child: filtered.isEmpty
-            ? const Center(child: Text('Bu kişiye ait harcama bulunamadı.'))
+            ? Center(child: Text(AppLocalizations.of(context).t('expense_none_for_person')))
             : ListView(
                 children: filtered.map((expense) {
       final payerName = resolveDisplayName(expense.paidBy, emailToName);
@@ -3751,10 +3773,10 @@ void showEditExpenseDialog(
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Ödeyen: $payerName'),
+              Text(AppLocalizations.of(context).t('expense_paid_by_prefix', {'name': payerName})),
               const SizedBox(height: 4),
               Text(
-                'Katılanlar: ${expense.participants.map((email) => resolveDisplayName(email, emailToName)).join(", ")}',
+                AppLocalizations.of(context).t('expense_participants_prefix', {'names': expense.participants.map((email) => resolveDisplayName(email, emailToName)).join(", ")}),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 12),
@@ -3770,10 +3792,10 @@ void showEditExpenseDialog(
                       const SizedBox(width: 4),
                       Text(
                         expense.splitType == "custom"
-                          ? "Bölüşüm: Kişiye Göre"
+                          ? AppLocalizations.of(context).t('expense_split_prefix_custom')
                           : expense.splitType == "weighted"
-                              ? "Bölüşüm: Paya Göre"
-                              : "Bölüşüm: Eşit Böl",
+                              ? AppLocalizations.of(context).t('expense_split_prefix_weighted')
+                              : AppLocalizations.of(context).t('expense_split_prefix_equal'),
                         style: const TextStyle(
                           fontSize: 12,
                           color: Colors.grey,
@@ -3795,7 +3817,7 @@ void showEditExpenseDialog(
                         expense.createdAt != null
                             ? "${expense.createdAt!.day.toString().padLeft(2, '0')}.${expense.createdAt!.month.toString().padLeft(2, '0')}.${expense.createdAt!.year} "
                                 "${expense.createdAt!.hour.toString().padLeft(2, '0')}:${expense.createdAt!.minute.toString().padLeft(2, '0')}"
-                            : "Tarih yok",
+                            : AppLocalizations.of(context).t('expense_no_date'),
                         style: const TextStyle(
                           fontSize: 11,
                           color: Colors.grey,
@@ -3815,10 +3837,10 @@ void showEditExpenseDialog(
                 ),
                 child: Text(
                   expense.splitType == "custom"
-                    ? "Kişiye Göre"
+                    ? AppLocalizations.of(context).t('expense_split_short_custom')
                     : expense.splitType == "weighted"
-                        ? "Paya Göre"
-                        : "Eşit Böl",
+                        ? AppLocalizations.of(context).t('expense_split_weighted')
+                        : AppLocalizations.of(context).t('expense_split_equal'),
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -3857,7 +3879,7 @@ void showEditExpenseDialog(
                     children: [
                       ListTile(
                         leading: const Icon(Icons.edit),
-                        title: const Text('Düzenle'),
+                        title: Text(AppLocalizations.of(context).t('common_edit')),
                         onTap: () {
                           Navigator.pop(context);
                           showEditExpenseDialog(
@@ -3869,19 +3891,19 @@ void showEditExpenseDialog(
                       ),
                       ListTile(
                         leading: const Icon(Icons.delete, color: Colors.red),
-                        title: const Text('Sil'),
+                        title: Text(AppLocalizations.of(context).t('common_delete')),
                         onTap: () {
                           Navigator.pop(context);
                           showDialog(
                             context: context,
                             builder: (context) {
                               return AlertDialog(
-                                title: const Text('Harcamayı Sil'),
-                                content: Text('${expense.title} silinsin mi?'),
+                                title: Text(AppLocalizations.of(context).t('expense_delete_title')),
+                                content: Text(AppLocalizations.of(context).t('expense_delete_confirm', {'title': expense.title})),
                                 actions: [
                                   TextButton(
                                     onPressed: () => Navigator.pop(context),
-                                    child: const Text('İptal'),
+                                    child: Text(AppLocalizations.of(context).t('common_cancel')),
                                   ),
                                   ElevatedButton(
                                     onPressed: () async {
@@ -3892,7 +3914,7 @@ void showEditExpenseDialog(
                                         Navigator.pop(context);
                                       }
                                     },
-                                    child: const Text('Sil'),
+                                    child: Text(AppLocalizations.of(context).t('common_delete')),
                                   ),
                                 ],
                               );
@@ -3902,7 +3924,7 @@ void showEditExpenseDialog(
                       ),
                       ListTile(
                         leading: const Icon(Icons.close),
-                        title: const Text('İptal'),
+                        title: Text(AppLocalizations.of(context).t('common_cancel')),
                         onTap: () => Navigator.pop(context),
                       ),
                     ],
@@ -3933,7 +3955,7 @@ void showEditExpenseDialog(
           child: OutlinedButton.icon(
             onPressed: showAddAnonymousMemberDialog,
             icon: const Icon(Icons.person_add_alt_1),
-            label: const Text('Anonim Üye Ekle'),
+            label: Text(AppLocalizations.of(context).t('member_add_anonymous_button')),
           ),
         ),
         if (isOwner)
@@ -3942,19 +3964,19 @@ void showEditExpenseDialog(
             child: OutlinedButton.icon(
               onPressed: () => scanOrphanReferences(memberEmails),
               icon: const Icon(Icons.search, color: Colors.deepOrange),
-              label: const Text('Yetim referansları tara',
-                  style: TextStyle(color: Colors.deepOrange)),
+              label: Text(AppLocalizations.of(context).t('member_scan_orphans_button'),
+                  style: const TextStyle(color: Colors.deepOrange)),
               style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.deepOrange)),
             ),
           ),
         const SizedBox(height: 8),
-        const ListTile(
-          title: Text('Üyeler'),
-          subtitle: Text('Yeni üyeler ana sayfadaki grup kodu ile katılır.'),
+        ListTile(
+          title: Text(AppLocalizations.of(context).t('member_tab_title')),
+          subtitle: Text(AppLocalizations.of(context).t('member_tab_subtitle')),
         ),
         if (memberEmails.isEmpty)
-          const Padding(padding: EdgeInsets.all(16), child: Text('Henüz üye yok'))
+          Padding(padding: const EdgeInsets.all(16), child: Text(AppLocalizations.of(context).t('member_none')))
         else
           ...memberEmails.map((email) {
             final name = resolveDisplayName(email, emailToName);
@@ -3969,11 +3991,11 @@ void showEditExpenseDialog(
                   child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?'),
                 ),
                 title: Text(name),
-                subtitle: Text(isAnon ? 'Anonim üye' : email),
+                subtitle: Text(isAnon ? AppLocalizations.of(context).t('member_anonymous_label') : email),
                 trailing: (isAnon && isOwner)
                     ? IconButton(
                         icon: const Icon(Icons.merge_type, color: Colors.orange),
-                        tooltip: 'Gerçek üyeyle birleştir',
+                        tooltip: AppLocalizations.of(context).t('member_merge_tooltip'),
                         onPressed: () => showMergeMemberDialog(
                           anonEmail: email,
                           anonDocId: docId ?? '',
@@ -3987,16 +4009,16 @@ void showEditExpenseDialog(
                     context: context,
                     builder: (context) {
                       return AlertDialog(
-                        title: const Text('Üyeyi Çıkar'),
-                        content: Text('$name gruptan çıkarılsın mı?'),
+                        title: Text(AppLocalizations.of(context).t('member_remove_title')),
+                        content: Text(AppLocalizations.of(context).t('member_remove_confirm', {'name': name})),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(context), child: const Text('İptal')),
+                          TextButton(onPressed: () => Navigator.pop(context), child: Text(AppLocalizations.of(context).t('common_cancel'))),
                           ElevatedButton(
                             onPressed: () async {
                               if (docId != null) await deleteMemberFromFirebase(docId);
                               if (context.mounted) Navigator.pop(context);
                             },
-                            child: const Text('Çıkar'),
+                            child: Text(AppLocalizations.of(context).t('common_remove')),
                           ),
                         ],
                       );
@@ -4019,7 +4041,7 @@ void showEditExpenseDialog(
 ) {
     return ListView(
       children: [
-        const ListTile(title: Text('Borç / Alacak Durumu')),
+        ListTile(title: Text(AppLocalizations.of(context).t('debt_status_title'))),
         ...memberEmails.map((email) {
           final value = balances[email] ?? 0;
           final name = resolveDisplayName(email, emailToName);
@@ -4027,13 +4049,13 @@ void showEditExpenseDialog(
           String text;
           if (value > 0) {
             color = Colors.green;
-            text = '${value.toStringAsFixed(2)} ${widget.groupCurrency} alacaklı';
+            text = AppLocalizations.of(context).t('debt_creditor_suffix', {'amount': '${value.toStringAsFixed(2)} ${widget.groupCurrency}'});
           } else if (value < 0) {
             color = Colors.red;
-            text = '${(-value).toStringAsFixed(2)} ${widget.groupCurrency} borçlu';
+            text = AppLocalizations.of(context).t('debt_debtor_suffix', {'amount': '${(-value).toStringAsFixed(2)} ${widget.groupCurrency}'});
           } else {
             color = Colors.grey;
-            text = 'Borcu yok';
+            text = AppLocalizations.of(context).t('debt_no_debt');
           }
           return Card(
             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -4045,9 +4067,9 @@ void showEditExpenseDialog(
           );
         }),
         const Divider(),
-        const ListTile(title: Text('Kim Kime Ödeyecek')),
+        ListTile(title: Text(AppLocalizations.of(context).t('debt_who_owes_whom'))),
         if (debts.isEmpty)
-          const Padding(padding: EdgeInsets.all(16), child: Text('Ödenecek borç yok'))
+          Padding(padding: const EdgeInsets.all(16), child: Text(AppLocalizations.of(context).t('debt_none')))
         else
           ...debts.map((debt) {
             String displayDebt = debt;
@@ -4072,7 +4094,7 @@ void showEditExpenseDialog(
                         await sendDebtReminder(toEmail: toEmail, amount: amount);
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Hatırlatma gönderildi')),
+                          SnackBar(content: Text(AppLocalizations.of(context).t('debt_reminder_sent'))),
                         );
                       },
                     ),
@@ -4104,7 +4126,7 @@ void showEditExpenseDialog(
     Map<String, String> emailToName,
   ) {
     if (payments.isEmpty) {
-      return const Center(child: Text('Henüz ödeme geçmişi yok'));
+      return Center(child: Text(AppLocalizations.of(context).t('history_none')));
     }
 
     final sortedPayments = [...payments];
@@ -4120,7 +4142,7 @@ void showEditExpenseDialog(
           child: ListTile(
             leading: const Icon(Icons.check_circle, color: Colors.green),
             title: Text('$fromName → $toName'),
-            subtitle: const Text('Ödeme kaydedildi'),
+            subtitle: Text(AppLocalizations.of(context).t('payment_recorded')),
             trailing: Text(
               '${payment.amount.toStringAsFixed(2)} ${widget.groupCurrency}',
               style: const TextStyle(fontWeight: FontWeight.bold),
@@ -4165,7 +4187,7 @@ Future<void> login() async {
 
     if (e.code == 'user-not-found') {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Bu e-posta kayıtlı değil. Lütfen kayıt olun.")),
+        SnackBar(content: Text(AppLocalizations.of(context).t('login_email_not_registered'))),
       );
 
       Navigator.push(
@@ -4177,18 +4199,18 @@ Future<void> login() async {
 
     if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("E-posta veya şifre hatalı.")),
+        SnackBar(content: Text(AppLocalizations.of(context).t('login_wrong_credentials'))),
       );
       return;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Giriş yapılamadı: ${e.message}")),
+      SnackBar(content: Text(AppLocalizations.of(context).t('login_failed', {'message': '${e.message}'}))),
     );
   } catch (e) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Hata: $e')),
+      SnackBar(content: Text(AppLocalizations.of(context).t('generic_error', {'error': '$e'}))),
     );
   }
 }
@@ -4199,12 +4221,12 @@ Future<void> showForgotPasswordDialog() async {
     context: context,
     builder: (context) {
       return AlertDialog(
-        title: const Text("Şifre Sıfırla"),
+        title: Text(AppLocalizations.of(context).t('login_reset_title')),
         content: TextField(
           controller: TextEditingController(text: resetEmail),
           keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(
-            hintText: "E-posta adresi",
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context).t('login_reset_email_hint'),
           ),
           onChanged: (value) {
             resetEmail = value.trim().toLowerCase();
@@ -4213,7 +4235,7 @@ Future<void> showForgotPasswordDialog() async {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("İptal"),
+            child: Text(AppLocalizations.of(context).t('common_cancel')),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -4227,9 +4249,9 @@ Future<void> showForgotPasswordDialog() async {
                 Navigator.pop(context);
 
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
+                  SnackBar(
                     content: Text(
-                      "Şifre sıfırlama bağlantısı gönderildi.",
+                      AppLocalizations.of(context).t('login_reset_sent'),
                     ),
                   ),
                 );
@@ -4239,13 +4261,13 @@ Future<void> showForgotPasswordDialog() async {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      e.message ?? "Şifre sıfırlama başarısız.",
+                      e.message ?? AppLocalizations.of(context).t('login_reset_failed_default'),
                     ),
                   ),
                 );
               }
             },
-            child: const Text("Gönder"),
+            child: Text(AppLocalizations.of(context).t('common_send')),
           ),
         ],
       );
@@ -4255,28 +4277,28 @@ Future<void> showForgotPasswordDialog() async {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Giriş Yap')),
+      appBar: AppBar(title: Text(AppLocalizations.of(context).t('login_title'))),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             TextField(
               onChanged: (value) => email = value,
-              decoration: const InputDecoration(labelText: 'Email'),
+              decoration: InputDecoration(labelText: AppLocalizations.of(context).t('login_email_label')),
             ),
             TextField(
               obscureText: true,
               onChanged: (value) => password = value,
-              decoration: const InputDecoration(labelText: 'Şifre'),
+              decoration: InputDecoration(labelText: AppLocalizations.of(context).t('login_password_label')),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: login,
-              child: const Text('Giriş Yap'),
+              child: Text(AppLocalizations.of(context).t('login_button')),
             ),
             TextButton(
               onPressed: showForgotPasswordDialog,
-              child: const Text("Şifremi Unuttum"),
+              child: Text(AppLocalizations.of(context).t('login_forgot_password')),
             ),
             TextButton(
               onPressed: () {
@@ -4285,9 +4307,9 @@ Future<void> showForgotPasswordDialog() async {
                   MaterialPageRoute(builder: (_) => const RegisterPage()),
                 );
               },
-              child: const Text('Kayıt Ol'),
+              child: Text(AppLocalizations.of(context).t('login_register_button')),
             )
-            
+
           ],
         ),
       ),
@@ -4308,7 +4330,7 @@ class GroupQrPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Grup QR Kodu"),
+        title: Text(AppLocalizations.of(context).t('qr_group_title')),
       ),
       body: Center(
         child: Card(
@@ -4337,7 +4359,7 @@ class GroupQrPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  "Grup Kodu: $groupCode",
+                  AppLocalizations.of(context).t('qr_group_code_label', {'code': groupCode}),
                   style: const TextStyle(fontSize: 16),
                 ),
               ],
@@ -4362,7 +4384,7 @@ class _GroupQrScannerPageState extends State<GroupQrScannerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("QR ile Gruba Katıl"),
+        title: Text(AppLocalizations.of(context).t('qr_scan_title')),
       ),
       body: MobileScanner(
         onDetect: (capture) {
@@ -4390,7 +4412,7 @@ class NotificationsPage extends StatelessWidget {
     final cleanEmail = user?.email?.trim().toLowerCase();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Bildirimler')),
+      appBar: AppBar(title: Text(AppLocalizations.of(context).t('notif_title'))),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('notificationRequests')
@@ -4399,7 +4421,7 @@ class NotificationsPage extends StatelessWidget {
         builder: (context, snapshot) {
           final docs = snapshot.data?.docs ?? [];
           if (docs.isEmpty) {
-            return const Center(child: Text('Bildirim yok'));
+            return Center(child: Text(AppLocalizations.of(context).t('notif_none')));
           }
 
           return ListView(
@@ -4424,8 +4446,8 @@ class NotificationsPage extends StatelessWidget {
                   ),
                   subtitle: Text(data['body'] ?? ''),
                   trailing: data['isRead'] == true
-                      ? const Text("Okundu")
-                      : const Text("Yeni"),
+                      ? Text(AppLocalizations.of(context).t('notif_read'))
+                      : Text(AppLocalizations.of(context).t('notif_new')),
                   onTap: () async {
                     await doc.reference.update({
                       'isRead': true,
@@ -4479,7 +4501,7 @@ class _RegisterPageState extends State<RegisterPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hata: $e')),
+        SnackBar(content: Text(AppLocalizations.of(context).t('generic_error', {'error': '$e'}))),
       );
     }
   }
@@ -4487,28 +4509,28 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Kayıt Ol')),
+      appBar: AppBar(title: Text(AppLocalizations.of(context).t('register_title'))),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             TextField(
               onChanged: (value) => name = value,
-              decoration: const InputDecoration(labelText: 'Ad Soyad'),
+              decoration: InputDecoration(labelText: AppLocalizations.of(context).t('register_name_label')),
             ),
             TextField(
               onChanged: (value) => email = value,
-              decoration: const InputDecoration(labelText: 'Email'),
+              decoration: InputDecoration(labelText: AppLocalizations.of(context).t('login_email_label')),
             ),
             TextField(
               obscureText: true,
               onChanged: (value) => password = value,
-              decoration: const InputDecoration(labelText: 'Şifre'),
+              decoration: InputDecoration(labelText: AppLocalizations.of(context).t('login_password_label')),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: register,
-              child: const Text('Kayıt Ol'),
+              child: Text(AppLocalizations.of(context).t('login_register_button')),
             ),
           ],
         ),
