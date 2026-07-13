@@ -81,5 +81,5 @@ workflows:
     publishing:
       google_play:
         credentials: $GPLAY_SERVICE_ACCOUNT_JSON
-        track: internal
+        track: ortakhesaptest
         
