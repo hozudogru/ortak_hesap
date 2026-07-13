@@ -67,13 +67,7 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-		<string>Bu uygulama profil fotoğrafı ve belge eklemek için kamerayı kullanır.</string>
-
-	<key>NSPhotoLibraryUsageDescription</key>
-		<string>Bu uygulama galeriden fotoğraf seçmek için erişim ister.</string>
-
-	<key>NSPhotoLibraryAddUsageDescription</key>
-		<string>Bu uygulama fotoğrafları galeriye kaydetmek için izin ister.</string>
+		<string>Bu uygulama grup katılım QR kodunu okutmak için kamerayı kullanır.</string>
 
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
