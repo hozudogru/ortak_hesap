@@ -53,6 +53,17 @@ const Map<String, String> stringsTr = {
   'home_delete_group_title': 'Grubu Sil',
   'home_delete_group_confirm': '{name} silinsin mi?',
   'home_user_not_found': 'Kullanıcı bulunamadı',
+  'home_menu_logout': 'Çıkış Yap',
+  'home_menu_delete_account': 'Hesabımı Sil',
+
+  'delete_account_title': 'Hesabı Sil',
+  'delete_account_warning':
+      'Hesabını sildiğinde profilin kalıcı olarak silinir ve üyesi olduğun tüm gruplardan çıkarılırsın. Bu işlem geri alınamaz. Devam etmek istiyor musun?',
+  'delete_account_password_prompt':
+      'Güvenliğin için devam etmeden önce şifreni tekrar girmen gerekiyor.',
+  'delete_account_password_label': 'Şifre',
+  'delete_account_confirm_button': 'Hesabımı Kalıcı Olarak Sil',
+  'delete_account_wrong_password': 'Şifre yanlış. Lütfen tekrar dene.',
 
   'member_add_anonymous_title': 'Anonim Üye Ekle',
   'member_name_label': 'Üye adı',

@@ -485,6 +485,151 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _removeUserFromAllGroups(String uid) async {
+    final groupsSnap = await FirebaseFirestore.instance
+        .collection('groups')
+        .where('memberIds', arrayContains: uid)
+        .get();
+
+    for (final groupDoc in groupsSnap.docs) {
+      final groupRef = groupDoc.reference;
+      await groupRef.update({
+        'memberIds': FieldValue.arrayRemove([uid]),
+      });
+      await groupRef.collection('members').doc(uid).delete();
+    }
+  }
+
+  Future<void> _deleteAccountFully(User user) async {
+    await _removeUserFromAllGroups(user.uid);
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
+    await user.delete();
+  }
+
+  void showDeleteAccountDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final loc = AppLocalizations.of(context);
+        return AlertDialog(
+          title: Text(loc.t('delete_account_title')),
+          content: Text(loc.t('delete_account_warning')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(loc.t('common_cancel')),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () {
+                Navigator.pop(context);
+                _showDeleteAccountPasswordDialog();
+              },
+              child: Text(loc.t('common_delete')),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showDeleteAccountPasswordDialog() {
+    String password = '';
+    bool isDeleting = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        final loc = AppLocalizations.of(context);
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(loc.t('delete_account_title')),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(loc.t('delete_account_password_prompt')),
+                  const SizedBox(height: 12),
+                  TextField(
+                    obscureText: true,
+                    autofocus: true,
+                    onChanged: (value) => password = value,
+                    decoration: InputDecoration(
+                      labelText: loc.t('delete_account_password_label'),
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isDeleting ? null : () => Navigator.pop(context),
+                  child: Text(loc.t('common_cancel')),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: isDeleting
+                      ? null
+                      : () async {
+                          if (password.isEmpty) return;
+                          setState(() => isDeleting = true);
+
+                          final user = FirebaseAuth.instance.currentUser;
+                          if (user == null || user.email == null) {
+                            Navigator.pop(context);
+                            return;
+                          }
+
+                          try {
+                            final cred = EmailAuthProvider.credential(
+                              email: user.email!,
+                              password: password,
+                            );
+                            await user.reauthenticateWithCredential(cred);
+                            await _deleteAccountFully(user);
+
+                            if (context.mounted) Navigator.pop(context);
+                          } on FirebaseAuthException catch (e) {
+                            setState(() => isDeleting = false);
+                            if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(loc.t('delete_account_wrong_password'))),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(loc.t('generic_error', {'error': '${e.message}'}))),
+                              );
+                            }
+                          } catch (e) {
+                            setState(() => isDeleting = false);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(loc.t('generic_error', {'error': '$e'}))),
+                              );
+                            }
+                          }
+                        },
+                  child: isDeleting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(loc.t('delete_account_confirm_button')),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void openGroupDetail(String groupName, String groupCurrency, String ownerEmail) {
     Navigator.push(
       context,
@@ -659,10 +804,36 @@ class _HomePageState extends State<HomePage> {
             icon: const Icon(Icons.group_add),
             onPressed: showJoinGroupDialog,
           ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'logout') {
+                FirebaseAuth.instance.signOut();
+              } else if (value == 'delete_account') {
+                showDeleteAccountDialog();
+              }
+            },
+            itemBuilder: (context) {
+              final loc = AppLocalizations.of(context);
+              return [
+                PopupMenuItem(
+                  value: 'logout',
+                  child: ListTile(
+                    leading: const Icon(Icons.logout),
+                    title: Text(loc.t('home_menu_logout')),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete_account',
+                  child: ListTile(
+                    leading: const Icon(Icons.delete_forever, color: Colors.red),
+                    title: Text(
+                      loc.t('home_menu_delete_account'),
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ),
+              ];
             },
           ),
         ],

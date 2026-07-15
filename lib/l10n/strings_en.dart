@@ -53,6 +53,17 @@ const Map<String, String> stringsEn = {
   'home_delete_group_title': 'Delete Group',
   'home_delete_group_confirm': 'Delete {name}?',
   'home_user_not_found': 'User not found',
+  'home_menu_logout': 'Log Out',
+  'home_menu_delete_account': 'Delete My Account',
+
+  'delete_account_title': 'Delete Account',
+  'delete_account_warning':
+      'Deleting your account permanently removes your profile and removes you from all groups you are a member of. This cannot be undone. Do you want to continue?',
+  'delete_account_password_prompt':
+      'For your security, please re-enter your password to continue.',
+  'delete_account_password_label': 'Password',
+  'delete_account_confirm_button': 'Permanently Delete My Account',
+  'delete_account_wrong_password': 'Incorrect password. Please try again.',
 
   'member_add_anonymous_title': 'Add Anonymous Member',
   'member_name_label': 'Member name',

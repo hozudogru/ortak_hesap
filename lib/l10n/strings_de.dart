@@ -54,6 +54,17 @@ const Map<String, String> stringsDe = {
   'home_delete_group_title': 'Gruppe löschen',
   'home_delete_group_confirm': '{name} löschen?',
   'home_user_not_found': 'Benutzer nicht gefunden',
+  'home_menu_logout': 'Abmelden',
+  'home_menu_delete_account': 'Konto löschen',
+
+  'delete_account_title': 'Konto löschen',
+  'delete_account_warning':
+      'Wenn du dein Konto löschst, wird dein Profil dauerhaft entfernt und du wirst aus allen Gruppen entfernt, in denen du Mitglied bist. Dies kann nicht rückgängig gemacht werden. Möchtest du fortfahren?',
+  'delete_account_password_prompt':
+      'Bitte gib zu deiner Sicherheit dein Passwort erneut ein, um fortzufahren.',
+  'delete_account_password_label': 'Passwort',
+  'delete_account_confirm_button': 'Konto endgültig löschen',
+  'delete_account_wrong_password': 'Falsches Passwort. Bitte versuche es erneut.',
 
   'member_add_anonymous_title': 'Anonymes Mitglied hinzufügen',
   'member_name_label': 'Mitgliedsname',
