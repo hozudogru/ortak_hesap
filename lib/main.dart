@@ -1991,7 +1991,7 @@ pw.Widget _pdfTableCell(
 
                   TextField(
                     controller: amountController,
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     onChanged: (value) => amount = value,
                     decoration: InputDecoration(
                       labelText: AppLocalizations.of(context).t('expense_amount_label', {'currency': groupCurrency}),
@@ -2160,7 +2160,7 @@ pw.Widget _pdfTableCell(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: TextField(
                           controller: shareControllers[email],
-                          keyboardType: TextInputType.number,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           decoration: InputDecoration(
                             labelText: AppLocalizations.of(context).t('expense_share_for_label', {'name': email.split("@").first}),
                             border: OutlineInputBorder(
@@ -2330,7 +2330,7 @@ void showEditExpenseDialog(
 
                   TextField(
                     controller: amountController,
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     onChanged: (value) => amount = value,
                     decoration: InputDecoration(
                       hintText: AppLocalizations.of(context).t('expense_amount_hint'),
@@ -2454,7 +2454,7 @@ void showEditExpenseDialog(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: TextField(
                           controller: shareControllers[email],
-                          keyboardType: TextInputType.number,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           decoration: InputDecoration(
                             labelText: AppLocalizations.of(context).t('expense_share_for_label', {'name': resolveDisplayName(email, emailToName)}),
                             border: const OutlineInputBorder(),
@@ -2514,6 +2514,32 @@ void showEditExpenseDialog(
                         );
                         return;
                       }
+                    } else if (splitType == "weighted") {
+                      double totalWeight = 0;
+                      final Map<String, double> weights = {};
+
+                      for (final email in selectedParticipants) {
+                        final text = shareControllers[email]?.text ?? "0";
+                        final weight = double.tryParse(text.replaceAll(",", ".")) ?? 0;
+
+                        if (weight <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                AppLocalizations.of(context).t('expense_enter_amount_for', {'name': resolveDisplayName(email, emailToName)}),
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        weights[email] = weight;
+                        totalWeight += weight;
+                      }
+
+                      for (final email in selectedParticipants) {
+                        customShares[email] = parsedAmount * (weights[email]! / totalWeight);
+                      }
                     }
 
                     await updateExpenseFromFirebase(
@@ -2565,7 +2591,8 @@ void showEditExpenseDialog(
     balance[expense.paidBy] =
         (balance[expense.paidBy] ?? 0) + expense.amount;
 
-    if (expense.splitType == "custom" || expense.splitType == "weighted") {
+    if ((expense.splitType == "custom" || expense.splitType == "weighted") &&
+        expense.shares.isNotEmpty) {
       expense.shares.forEach((email, shareAmount) {
         balance[email] = (balance[email] ?? 0) - shareAmount;
       });
