@@ -264,6 +264,8 @@ class _HomePageState extends State<HomePage> {
     void initState() {
     super.initState();
 
+    saveFcmToken();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkUnreadNotificationsPopup();
     });
@@ -3679,7 +3681,26 @@ void showEditExpenseDialog(
                                 },
                               ),
                             IconButton(
-                              icon: const Icon(Icons.notifications),
+                              icon: StreamBuilder<QuerySnapshot>(
+                                stream: FirebaseFirestore.instance
+                                    .collection('notificationRequests')
+                                    .where(
+                                      'toEmail',
+                                      isEqualTo: FirebaseAuth.instance.currentUser?.email
+                                          ?.trim()
+                                          .toLowerCase(),
+                                    )
+                                    .where('isRead', isEqualTo: false)
+                                    .snapshots(),
+                                builder: (context, snapshot) {
+                                  final unreadCount = snapshot.data?.docs.length ?? 0;
+                                  return Badge(
+                                    label: Text('$unreadCount'),
+                                    isLabelVisible: unreadCount > 0,
+                                    child: const Icon(Icons.notifications),
+                                  );
+                                },
+                              ),
                           onPressed: () {
                             Navigator.push(
                               context,
