@@ -3356,7 +3356,12 @@ void showEditExpenseDialog(
     );
   }
 
-  Widget _buildChartTab(List<Expense> expenses, Map<String, String> emailToName) {
+  Widget _buildChartTab(
+    List<Expense> expenses,
+    Map<String, String> emailToName,
+    double perPersonAmount,
+    String groupCurrency,
+  ) {
     if (expenses.isEmpty) {
       return Center(child: Text(AppLocalizations.of(context).t('chart_no_data')));
     }
@@ -3451,6 +3456,21 @@ void showEditExpenseDialog(
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            AppLocalizations.of(context).t('summary_per_person'),
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 11,
+                            ),
+                          ),
+                          Text(
+                            "${perPersonAmount.toStringAsFixed(2)} $groupCurrency",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
                             ),
                           ),
                         ],
@@ -3628,8 +3648,8 @@ void showEditExpenseDialog(
                 final totalAmount = calculateTotal(firebaseExpenses);
                 final groupCurrency = widget.groupCurrency;
 
-                final perPersonAmount =
-                    memberEmails.isEmpty ? 0 : totalAmount / memberEmails.length;
+                final double perPersonAmount =
+                    memberEmails.isEmpty ? 0.0 : totalAmount / memberEmails.length;
                 final rawBalances = calculateBalanceFromExpenses(firebaseExpenses, memberEmails);
                 final balances = applyPaymentsToBalance(rawBalances, payments);
                 final debts = calculateDebtsFromBalance(balances, groupCurrency);
@@ -3714,59 +3734,25 @@ void showEditExpenseDialog(
                             elevation: 3,
                             child: Padding(
                               padding: const EdgeInsets.all(16),
-                              child: Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          AppLocalizations.of(context).t('summary_total_expense'),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(color: Colors.grey),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          alignment: Alignment.centerLeft,
-                                          child: Text(
-                                            "${totalAmount.toStringAsFixed(2)} $groupCurrency",
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  Text(
+                                    AppLocalizations.of(context).t('summary_total_expense'),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(color: Colors.grey),
                                   ),
-
-                                  const SizedBox(width: 12),
-
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          AppLocalizations.of(context).t('summary_per_person'),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(color: Colors.grey),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          alignment: Alignment.centerRight,
-                                          child: Text(
-                                            "${perPersonAmount.toStringAsFixed(2)} $groupCurrency",
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                  const SizedBox(height: 6),
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      "${totalAmount.toStringAsFixed(2)} $groupCurrency",
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -3782,7 +3768,7 @@ void showEditExpenseDialog(
                               _buildExpensesTab(firebaseExpenses, memberEmails, emailToName),
                               _buildMembersTab(memberEmails, emailToName, emailToDocId, _isOwner),
                               _buildDebtsTab(memberEmails, emailToName, balances, debts, groupCurrency),
-                              _buildChartTab(firebaseExpenses, emailToName),
+                              _buildChartTab(firebaseExpenses, emailToName, perPersonAmount, groupCurrency),
                               _buildPaymentsHistoryTab(payments, emailToName),
                             ],
                           ),
