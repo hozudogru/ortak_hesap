@@ -1,11 +1,12 @@
-const functions = require("firebase-functions");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-exports.sendNotificationRequest = functions.firestore
-  .document("notificationRequests/{requestId}")
-  .onCreate(async (snap, context) => {
+exports.sendNotificationRequest = onDocumentCreated(
+  "notificationRequests/{requestId}",
+  async (event) => {
+    const snap = event.data;
     const data = snap.data();
 
     const toEmail = data.toEmail;

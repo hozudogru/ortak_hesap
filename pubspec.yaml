@@ -46,6 +46,7 @@ dependencies:
   printing: ^5.13.4
   intl: ^0.20.2
   share_plus: ^13.0.0      # ✅ buraya taşındı
+  flutter_local_notifications: ^22.2.0
 
 dev_dependencies:
   flutter_test:
