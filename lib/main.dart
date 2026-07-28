@@ -4335,11 +4335,18 @@ void showEditExpenseDialog(
                         if (parts.length < 2) return;
                         final toEmail = parts[0].trim().toLowerCase();
                         final amount = parts[1].contains(':') ? parts[1].split(':')[1].trim() : '';
-                        await sendDebtReminder(toEmail: toEmail, amount: amount);
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(AppLocalizations.of(context).t('debt_reminder_sent'))),
-                        );
+                        try {
+                          await sendDebtReminder(toEmail: toEmail, amount: amount);
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(AppLocalizations.of(context).t('debt_reminder_sent'))),
+                          );
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(AppLocalizations.of(context).t('generic_error', {'error': '$e'}))),
+                          );
+                        }
                       },
                     ),
                     IconButton(
