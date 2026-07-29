@@ -15,6 +15,7 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 
 import 'l10n/app_localizations.dart';
@@ -119,6 +120,17 @@ Future<void> saveFcmToken() async {
     );
 
     if (Platform.isIOS) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final nativeToken = prefs.getString('apnsNativeToken');
+        final nativeError = prefs.getString('apnsNativeError');
+        debugLog.add('native apnsNativeToken: ${nativeToken ?? "yok"}');
+        debugLog.add('native apnsNativeError: ${nativeError ?? "yok"}');
+      } catch (e) {
+        debugLog.add('SharedPreferences okuma hatası: ${e.toString()}');
+        debugPrint("SharedPreferences okuma hatası: ${e.toString()}");
+      }
+
       String? apnsToken = await messaging.getAPNSToken();
       var attempts = 1;
       debugLog.add(
