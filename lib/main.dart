@@ -1945,6 +1945,38 @@ pw.Widget _pdfTableCell(
       'shares': expense.shares,
       'createdAt': FieldValue.serverTimestamp(),
     });
+
+    await _notifyGroupOfNewExpense(expense);
+  }
+
+  Future<void> _notifyGroupOfNewExpense(Expense expense) async {
+    final fromEmail =
+        FirebaseAuth.instance.currentUser?.email?.trim().toLowerCase() ?? '';
+    if (fromEmail.isEmpty) return;
+
+    final recipients = expense.participants
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty && e != fromEmail)
+        .toSet();
+
+    final batch = FirebaseFirestore.instance.batch();
+    final requests = FirebaseFirestore.instance.collection('notificationRequests');
+
+    for (final toEmail in recipients) {
+      batch.set(requests.doc(), {
+        'type': 'expense_added',
+        'toEmail': toEmail,
+        'fromEmail': fromEmail,
+        'groupName': widget.groupName,
+        'createdAt': FieldValue.serverTimestamp(),
+        'status': 'pending',
+        'isRead': false,
+      });
+    }
+
+    if (recipients.isNotEmpty) {
+      await batch.commit();
+    }
   }
 
   Future<void> updateExpenseFromFirebase(Expense expense) async {
