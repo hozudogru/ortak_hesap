@@ -18,6 +18,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'dart:io';
 
 import 'l10n/app_localizations.dart';
+import 'services/version_check_service.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -69,6 +70,22 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await _initLocalNotifications();
+  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+  FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'fcmToken': token,
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint("FCM token yenileme hatası: $e");
+    }
+  });
   runApp(const MyApp());
 }
 
@@ -79,7 +96,11 @@ Future<void> saveFcmToken() async {
 
     final messaging = FirebaseMessaging.instance;
 
-    await messaging.requestPermission();
+    await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
 
     if (Platform.isIOS) {
       final apnsToken = await messaging.getAPNSToken();
@@ -268,6 +289,7 @@ class _HomePageState extends State<HomePage> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkUnreadNotificationsPopup();
+      VersionCheckService.check(context);
     });
   }
   bool _notificationPopupShown = false;
