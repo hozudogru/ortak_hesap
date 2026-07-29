@@ -89,30 +89,54 @@ void main() async {
   runApp(const MyApp());
 }
 
-Future<void> saveFcmToken() async {
+Future<void> _writeFcmDebugLog(String uid, List<String> debugLog) async {
   try {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    await FirebaseFirestore.instance.collection('users').doc(uid).set({
+      'fcmDebug': debugLog,
+      'fcmDebugTime': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  } catch (e) {
+    debugPrint("FCM debug log yazma hatası: ${e.toString()}");
+  }
+}
 
+Future<void> saveFcmToken() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
+
+  final List<String> debugLog = [];
+
+  try {
     final messaging = FirebaseMessaging.instance;
 
-    await messaging.requestPermission(
+    final settings = await messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
+    debugLog.add(
+      'requestPermission: authorizationStatus=${settings.authorizationStatus}',
+    );
 
     if (Platform.isIOS) {
       String? apnsToken = await messaging.getAPNSToken();
-      var attempts = 0;
+      var attempts = 1;
+      debugLog.add(
+        'getAPNSToken deneme #$attempts: ${apnsToken == null ? "null" : "alındı"}',
+      );
       while (apnsToken == null && attempts < 10) {
         await Future.delayed(const Duration(seconds: 2));
         apnsToken = await messaging.getAPNSToken();
         attempts++;
+        debugLog.add(
+          'getAPNSToken deneme #$attempts: ${apnsToken == null ? "null" : "alındı"}',
+        );
       }
 
       if (apnsToken == null) {
-        debugPrint("APNS token 10 denemede alınamadı. FCM token kaydı atlandı.");
+        debugLog.add('APNS token $attempts denemede alınamadı. FCM token kaydı atlandı.');
+        debugPrint("APNS token $attempts denemede alınamadı. FCM token kaydı atlandı.");
+        await _writeFcmDebugLog(user.uid, debugLog);
         return;
       }
     }
@@ -120,19 +144,36 @@ Future<void> saveFcmToken() async {
     String? token;
     try {
       token = await messaging.getToken();
+      debugLog.add('getToken sonucu (1. deneme): ${token ?? "null"}');
     } catch (e) {
-      debugPrint("FCM getToken hatası: $e");
+      debugLog.add('getToken hatası (1. deneme): ${e.toString()}');
+      debugPrint("FCM getToken hatası (1. deneme): ${e.toString()}");
       await Future.delayed(const Duration(seconds: 3));
-      token = await messaging.getToken();
+      try {
+        token = await messaging.getToken();
+        debugLog.add('getToken sonucu (2. deneme): ${token ?? "null"}');
+      } catch (e2) {
+        debugLog.add('getToken hatası (2. deneme): ${e2.toString()}');
+        debugPrint("FCM getToken hatası (2. deneme): ${e2.toString()}");
+        await _writeFcmDebugLog(user.uid, debugLog);
+        return;
+      }
     }
 
-    if (token == null) return;
+    if (token == null) {
+      await _writeFcmDebugLog(user.uid, debugLog);
+      return;
+    }
 
     await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
       'fcmToken': token,
+      'fcmDebug': debugLog,
+      'fcmDebugTime': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   } catch (e) {
-    debugPrint("FCM token hatası: $e");
+    debugLog.add('saveFcmToken genel hatası: ${e.toString()}');
+    debugPrint("FCM token hatası: ${e.toString()}");
+    await _writeFcmDebugLog(user.uid, debugLog);
   }
 }
 
