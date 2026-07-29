@@ -15,7 +15,6 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 
 import 'l10n/app_localizations.dart';
@@ -90,65 +89,30 @@ void main() async {
   runApp(const MyApp());
 }
 
-Future<void> _writeFcmDebugLog(String uid, List<String> debugLog) async {
-  try {
-    await FirebaseFirestore.instance.collection('users').doc(uid).set({
-      'fcmDebug': debugLog,
-      'fcmDebugTime': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-  } catch (e) {
-    debugPrint("FCM debug log yazma hatası: ${e.toString()}");
-  }
-}
-
 Future<void> saveFcmToken() async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
-
-  final List<String> debugLog = [];
-
   try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
     final messaging = FirebaseMessaging.instance;
 
-    final settings = await messaging.requestPermission(
+    await messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
-    debugLog.add(
-      'requestPermission: authorizationStatus=${settings.authorizationStatus}',
-    );
 
     if (Platform.isIOS) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final nativeToken = prefs.getString('apnsNativeToken');
-        final nativeError = prefs.getString('apnsNativeError');
-        debugLog.add('native apnsNativeToken: ${nativeToken ?? "yok"}');
-        debugLog.add('native apnsNativeError: ${nativeError ?? "yok"}');
-      } catch (e) {
-        debugLog.add('SharedPreferences okuma hatası: ${e.toString()}');
-        debugPrint("SharedPreferences okuma hatası: ${e.toString()}");
-      }
-
       String? apnsToken = await messaging.getAPNSToken();
-      var attempts = 1;
-      debugLog.add(
-        'getAPNSToken deneme #$attempts: ${apnsToken == null ? "null" : "alındı"}',
-      );
+      var attempts = 0;
       while (apnsToken == null && attempts < 10) {
         await Future.delayed(const Duration(seconds: 2));
         apnsToken = await messaging.getAPNSToken();
         attempts++;
-        debugLog.add(
-          'getAPNSToken deneme #$attempts: ${apnsToken == null ? "null" : "alındı"}',
-        );
       }
 
       if (apnsToken == null) {
-        debugLog.add('APNS token $attempts denemede alınamadı. FCM token kaydı atlandı.');
-        debugPrint("APNS token $attempts denemede alınamadı. FCM token kaydı atlandı.");
-        await _writeFcmDebugLog(user.uid, debugLog);
+        debugPrint("APNS token 10 denemede alınamadı. FCM token kaydı atlandı.");
         return;
       }
     }
@@ -156,36 +120,19 @@ Future<void> saveFcmToken() async {
     String? token;
     try {
       token = await messaging.getToken();
-      debugLog.add('getToken sonucu (1. deneme): ${token ?? "null"}');
     } catch (e) {
-      debugLog.add('getToken hatası (1. deneme): ${e.toString()}');
-      debugPrint("FCM getToken hatası (1. deneme): ${e.toString()}");
+      debugPrint("FCM getToken hatası: $e");
       await Future.delayed(const Duration(seconds: 3));
-      try {
-        token = await messaging.getToken();
-        debugLog.add('getToken sonucu (2. deneme): ${token ?? "null"}');
-      } catch (e2) {
-        debugLog.add('getToken hatası (2. deneme): ${e2.toString()}');
-        debugPrint("FCM getToken hatası (2. deneme): ${e2.toString()}");
-        await _writeFcmDebugLog(user.uid, debugLog);
-        return;
-      }
+      token = await messaging.getToken();
     }
 
-    if (token == null) {
-      await _writeFcmDebugLog(user.uid, debugLog);
-      return;
-    }
+    if (token == null) return;
 
     await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
       'fcmToken': token,
-      'fcmDebug': debugLog,
-      'fcmDebugTime': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   } catch (e) {
-    debugLog.add('saveFcmToken genel hatası: ${e.toString()}');
-    debugPrint("FCM token hatası: ${e.toString()}");
-    await _writeFcmDebugLog(user.uid, debugLog);
+    debugPrint("FCM token hatası: $e");
   }
 }
 
