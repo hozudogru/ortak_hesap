@@ -103,15 +103,28 @@ Future<void> saveFcmToken() async {
     );
 
     if (Platform.isIOS) {
-      final apnsToken = await messaging.getAPNSToken();
+      String? apnsToken = await messaging.getAPNSToken();
+      var attempts = 0;
+      while (apnsToken == null && attempts < 10) {
+        await Future.delayed(const Duration(seconds: 2));
+        apnsToken = await messaging.getAPNSToken();
+        attempts++;
+      }
 
       if (apnsToken == null) {
-        debugPrint("APNS token henüz hazır değil. FCM token kaydı atlandı.");
+        debugPrint("APNS token 10 denemede alınamadı. FCM token kaydı atlandı.");
         return;
       }
     }
 
-    final token = await messaging.getToken();
+    String? token;
+    try {
+      token = await messaging.getToken();
+    } catch (e) {
+      debugPrint("FCM getToken hatası: $e");
+      await Future.delayed(const Duration(seconds: 3));
+      token = await messaging.getToken();
+    }
 
     if (token == null) return;
 
