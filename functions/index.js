@@ -105,8 +105,14 @@ exports.sendNotificationRequest = onDocumentCreated(
           apns: {
             payload: {
               aps: {
-                sound: "default",
+                sound: "coin.wav",
               },
+            },
+          },
+          android: {
+            notification: {
+              sound: "coin",
+              channelId: "ortakhesap_sound_v2",
             },
           },
         });

@@ -24,10 +24,11 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
 const AndroidNotificationChannel _highImportanceChannel = AndroidNotificationChannel(
-  'high_importance_channel',
+  'ortakhesap_sound_v2',
   'Önemli Bildirimler',
   description: 'Borç hatırlatmaları ve grup bildirimleri için kullanılır.',
   importance: Importance.high,
+  sound: RawResourceAndroidNotificationSound('coin'),
 );
 
 Future<void> _initLocalNotifications() async {
@@ -57,6 +58,7 @@ Future<void> _initLocalNotifications() async {
           importance: Importance.high,
           priority: Priority.high,
           icon: '@mipmap/ic_launcher',
+          sound: const RawResourceAndroidNotificationSound('coin'),
         ),
         iOS: const DarwinNotificationDetails(),
       ),
@@ -147,7 +149,8 @@ class Expense {
   final String splitType;
   final String category;
   final Map<String, double> shares;
-  
+  final String createdByUid;
+  final String createdByEmail;
 
   Expense({
     required this.id,
@@ -160,7 +163,8 @@ class Expense {
     required this.splitType,
     required this.category,
     required this.shares,
-    
+    this.createdByUid = '',
+    this.createdByEmail = '',
   });
 }
 class Payment {
@@ -454,7 +458,31 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> deleteGroupFromFirebase(String groupName) async {
-    await FirebaseFirestore.instance.collection('groups').doc(groupName).delete();
+    final groupRef = FirebaseFirestore.instance.collection('groups').doc(groupName);
+
+    try {
+      for (final subcollection in ['expenses', 'members', 'payments']) {
+        final snap = await groupRef.collection(subcollection).get();
+        final batch = FirebaseFirestore.instance.batch();
+        for (final doc in snap.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+
+      await groupRef.delete();
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).t('home_delete_group_permission_denied')),
+          ),
+        );
+      } else {
+        rethrow;
+      }
+    }
   }
 
   void showAddGroupDialog() {
@@ -1149,6 +1177,18 @@ class _HomePageState extends State<HomePage> {
                                       (data['ownerEmail'] ?? '').toString().trim().toLowerCase(),
                                     ),
                                     onLongPress: () {
+                                      final currentUid =
+                                          FirebaseAuth.instance.currentUser?.uid ?? '';
+                                      final ownerId = (data['ownerId'] ?? '').toString();
+                                      if (ownerId.isEmpty || currentUid != ownerId) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(AppLocalizations.of(context)
+                                                .t('home_delete_group_permission_denied')),
+                                          ),
+                                        );
+                                        return;
+                                      }
                                       showDialog(
                                         context: context,
                                         builder: (context) {
@@ -1929,6 +1969,8 @@ pw.Widget _pdfTableCell(
   }
 
   Future<void> saveExpenseToFirebase(Expense expense) async {
+    final user = FirebaseAuth.instance.currentUser;
+
     await FirebaseFirestore.instance
         .collection('groups')
         .doc(widget.groupName)
@@ -1943,6 +1985,8 @@ pw.Widget _pdfTableCell(
       'splitType': expense.splitType,
       'category': expense.category,
       'shares': expense.shares,
+      'createdByUid': user?.uid ?? '',
+      'createdByEmail': user?.email?.trim().toLowerCase() ?? '',
       'createdAt': FieldValue.serverTimestamp(),
     });
 
@@ -1979,31 +2023,60 @@ pw.Widget _pdfTableCell(
     }
   }
 
+  bool canModifyExpense(Expense expense) {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    return _isOwner ||
+        (expense.createdByUid.isNotEmpty && expense.createdByUid == currentUid);
+  }
+
+  void _showExpensePermissionDenied() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context).t('expense_permission_denied'))),
+    );
+  }
+
   Future<void> updateExpenseFromFirebase(Expense expense) async {
-    await FirebaseFirestore.instance
-        .collection('groups')
-        .doc(widget.groupName)
-        .collection('expenses')
-        .doc(expense.id)
-        .update({
-      'title': expense.title,
-      'amount': expense.amount,
-      'paidBy': expense.paidBy,
-      'paidByEmail': expense.paidBy,
-      'participants': expense.participants.map((e) => e.trim().toLowerCase()).toList(),
-      'splitType': expense.splitType,
-      'shares': expense.shares,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    try {
+      await FirebaseFirestore.instance
+          .collection('groups')
+          .doc(widget.groupName)
+          .collection('expenses')
+          .doc(expense.id)
+          .update({
+        'title': expense.title,
+        'amount': expense.amount,
+        'paidBy': expense.paidBy,
+        'paidByEmail': expense.paidBy,
+        'participants': expense.participants.map((e) => e.trim().toLowerCase()).toList(),
+        'splitType': expense.splitType,
+        'shares': expense.shares,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        _showExpensePermissionDenied();
+      } else {
+        rethrow;
+      }
+    }
   }
 
   Future<void> deleteExpenseFromFirebase(String expenseId) async {
-    await FirebaseFirestore.instance
-        .collection('groups')
-        .doc(widget.groupName)
-        .collection('expenses')
-        .doc(expenseId)
-        .delete();
+    try {
+      await FirebaseFirestore.instance
+          .collection('groups')
+          .doc(widget.groupName)
+          .collection('expenses')
+          .doc(expenseId)
+          .delete();
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        _showExpensePermissionDenied();
+      } else {
+        rethrow;
+      }
+    }
   }
 
   Future<void> deleteMemberFromFirebase(String memberDocId) async {
@@ -3680,6 +3753,8 @@ void showEditExpenseDialog(
                     ),
                   ),
                 ),
+                createdByUid: (data['createdByUid'] ?? '').toString(),
+                createdByEmail: (data['createdByEmail'] ?? '').toString().trim().toLowerCase(),
               );
             }).toList();
             pdfExpenses = expenseDocs.map((doc) {
@@ -4220,9 +4295,17 @@ void showEditExpenseDialog(
             ),
           ),
           onTap: () {
+            if (!canModifyExpense(expense)) {
+              _showExpensePermissionDenied();
+              return;
+            }
             showEditExpenseDialog(expense, memberEmails, emailToName);
           },
           onLongPress: () {
+            if (!canModifyExpense(expense)) {
+              _showExpensePermissionDenied();
+              return;
+            }
             showModalBottomSheet(
               context: context,
               builder: (context) {

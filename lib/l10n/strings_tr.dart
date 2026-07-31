@@ -52,6 +52,7 @@ const Map<String, String> stringsTr = {
   'home_menu_qr': 'QR Göster',
   'home_delete_group_title': 'Grubu Sil',
   'home_delete_group_confirm': '{name} silinsin mi?',
+  'home_delete_group_permission_denied': 'Bu grubu sadece grup sahibi silebilir.',
   'home_user_not_found': 'Kullanıcı bulunamadı',
   'home_menu_logout': 'Çıkış Yap',
   'home_menu_delete_account': 'Hesabımı Sil',
@@ -156,6 +157,7 @@ const Map<String, String> stringsTr = {
   'expense_role_participant': 'Katıldı',
   'expense_delete_title': 'Harcamayı Sil',
   'expense_delete_confirm': '{title} silinsin mi?',
+  'expense_permission_denied': 'Bu harcamayı sadece ekleyen kişi veya grup sahibi düzenleyebilir.',
 
   'debt_status_title': 'Borç / Alacak Durumu',
   'debt_creditor_suffix': '{amount} alacaklı',

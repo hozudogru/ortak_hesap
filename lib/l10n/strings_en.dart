@@ -52,6 +52,7 @@ const Map<String, String> stringsEn = {
   'home_menu_qr': 'Show QR',
   'home_delete_group_title': 'Delete Group',
   'home_delete_group_confirm': 'Delete {name}?',
+  'home_delete_group_permission_denied': 'Only the group owner can delete this group.',
   'home_user_not_found': 'User not found',
   'home_menu_logout': 'Log Out',
   'home_menu_delete_account': 'Delete My Account',
@@ -156,6 +157,7 @@ const Map<String, String> stringsEn = {
   'expense_role_participant': 'Took part',
   'expense_delete_title': 'Delete Expense',
   'expense_delete_confirm': 'Delete {title}?',
+  'expense_permission_denied': 'Only the person who added this expense or the group owner can edit it.',
 
   'debt_status_title': 'Balance Overview',
   'debt_creditor_suffix': '{amount} owed to them',
