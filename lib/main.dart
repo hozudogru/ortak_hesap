@@ -24,7 +24,7 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
 const AndroidNotificationChannel _highImportanceChannel = AndroidNotificationChannel(
-  'ortakhesap_sound_v2',
+  'ortakhesap_sound_v3',
   'Önemli Bildirimler',
   description: 'Borç hatırlatmaları ve grup bildirimleri için kullanılır.',
   importance: Importance.high,

@@ -112,7 +112,7 @@ exports.sendNotificationRequest = onDocumentCreated(
           android: {
             notification: {
               sound: "coin",
-              channelId: "ortakhesap_sound_v2",
+              channelId: "ortakhesap_sound_v3",
             },
           },
         });
