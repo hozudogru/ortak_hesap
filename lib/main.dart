@@ -328,7 +328,11 @@ class _HomePageState extends State<HomePage> {
       .where('isRead', isEqualTo: false)
       .get();
 
-  if (snapshot.docs.isEmpty) return;
+  final unreadDocs = snapshot.docs.where((doc) {
+    return doc.data()['status'] != 'failed';
+  }).toList();
+
+  if (unreadDocs.isEmpty) return;
 
   _notificationPopupShown = true;
 
@@ -341,7 +345,7 @@ class _HomePageState extends State<HomePage> {
         title: Text(AppLocalizations.of(context).t('home_new_notifications_title')),
         content: Text(
           AppLocalizations.of(context).t('home_new_notifications_body',
-              {'count': snapshot.docs.length.toString()}),
+              {'count': unreadDocs.length.toString()}),
         ),
         actions: [
           TextButton(
@@ -3835,7 +3839,11 @@ void showEditExpenseDialog(
                                     .where('isRead', isEqualTo: false)
                                     .snapshots(),
                                 builder: (context, snapshot) {
-                                  final unreadCount = snapshot.data?.docs.length ?? 0;
+                                  final unreadCount = snapshot.data?.docs.where((doc) {
+                                        final data = doc.data() as Map<String, dynamic>;
+                                        return data['status'] != 'failed';
+                                      }).length ??
+                                      0;
                                   return Badge(
                                     label: Text('$unreadCount'),
                                     isLabelVisible: unreadCount > 0,
@@ -3963,7 +3971,7 @@ void showEditExpenseDialog(
                             child: TabBarView(
                             children: [
                               _buildExpensesTab(firebaseExpenses, memberEmails, emailToName),
-                              _buildMembersTab(memberEmails, emailToName, emailToDocId, _isOwner),
+                              _buildMembersTab(memberEmails, emailToName, emailToDocId, _isOwner, balances, groupCurrency),
                               _buildDebtsTab(memberEmails, emailToName, balances, debts, groupCurrency),
                               _buildChartTab(firebaseExpenses, emailToName, perPersonAmount, groupCurrency),
                               _buildPaymentsHistoryTab(payments, emailToName),
@@ -4382,6 +4390,8 @@ void showEditExpenseDialog(
     Map<String, String> emailToName,
     Map<String, String> emailToDocId,
     bool isOwner,
+    Map<String, double> balances,
+    String groupCurrency,
   ) {
     return ListView(
       children: [
@@ -4440,6 +4450,35 @@ void showEditExpenseDialog(
                       )
                     : null,
                 onLongPress: () {
+                  final balance = balances[email] ?? 0.0;
+                  if (balance.abs() >= 0.01) {
+                    final amountText = '${balance.abs().toStringAsFixed(2)} $groupCurrency';
+                    showDialog(
+                      context: context,
+                      builder: (context) {
+                        final loc = AppLocalizations.of(context);
+                        return AlertDialog(
+                          title: Text(loc.t('member_remove_blocked_title')),
+                          content: Text(
+                            loc.t(
+                              balance > 0
+                                  ? 'member_remove_blocked_creditor'
+                                  : 'member_remove_blocked_debtor',
+                              {'amount': amountText},
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: Text(loc.t('common_ok')),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                    return;
+                  }
+
                   showDialog(
                     context: context,
                     builder: (context) {
@@ -4861,7 +4900,16 @@ class NotificationsPage extends StatelessWidget {
             .where('toEmail', isEqualTo: cleanEmail)
             .snapshots(),
         builder: (context, snapshot) {
-          final docs = snapshot.data?.docs ?? [];
+          final docs = (snapshot.data?.docs ?? []).where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return data['status'] != 'failed';
+          }).toList()
+            ..sort((a, b) {
+              final aCreatedAt = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+              final bCreatedAt = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+              if (aCreatedAt == null || bCreatedAt == null) return 0;
+              return bCreatedAt.compareTo(aCreatedAt);
+            });
           if (docs.isEmpty) {
             return Center(child: Text(AppLocalizations.of(context).t('notif_none')));
           }

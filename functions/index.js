@@ -1,4 +1,5 @@
 const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
@@ -57,10 +58,14 @@ exports.sendNotificationRequest = onDocumentCreated(
         )];
 
         if (toEmails.length === 0) {
-          console.error(
-              `notificationRequests/${requestId}: geçerli hedef kullanıcı yok`,
-          );
-          await requestRef.delete();
+          const message =
+              `notificationRequests/${requestId}: geçerli hedef kullanıcı yok`;
+          console.error(message);
+          await requestRef.update({
+            status: "failed",
+            error: message,
+            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
           return;
         }
 
@@ -88,10 +93,15 @@ exports.sendNotificationRequest = onDocumentCreated(
         }
 
         if (tokens.length === 0) {
-          console.error(
-              `notificationRequests/${requestId}: hiçbir hedef kullanıcının fcmToken'ı yok`,
-          );
-          await requestRef.delete();
+          const message =
+              `notificationRequests/${requestId}: hiçbir hedef kullanıcının ` +
+              `fcmToken'ı yok`;
+          console.error(message);
+          await requestRef.update({
+            status: "failed",
+            error: message,
+            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
           return;
         }
 
@@ -118,14 +128,16 @@ exports.sendNotificationRequest = onDocumentCreated(
         });
 
         const cleanupTasks = [];
+        const errorMessages = [];
         response.responses.forEach((result, index) => {
           if (result.success) return;
 
           const token = tokens[index];
-          console.error(
+          const errorMessage =
               `notificationRequests/${requestId}: token gönderim hatası ` +
-              `(${token}): ${result.error}`,
-          );
+              `(${token}): ${result.error}`;
+          console.error(errorMessage);
+          errorMessages.push(errorMessage);
 
           if (result.error &&
               result.error.code ===
@@ -142,18 +154,79 @@ exports.sendNotificationRequest = onDocumentCreated(
         });
 
         await Promise.all(cleanupTasks);
-        await requestRef.delete();
+
+        if (response.successCount > 0) {
+          await requestRef.update({
+            status: "sent",
+            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } else {
+          await requestRef.update({
+            status: "failed",
+            error: errorMessages.join(" | "),
+            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
       } catch (error) {
-        console.error(
-            `notificationRequests/${requestId} işlenirken hata: ${error}`,
-        );
+        const message =
+            `notificationRequests/${requestId} işlenirken hata: ${error}`;
+        console.error(message);
         try {
-          await requestRef.delete();
-        } catch (deleteError) {
+          await requestRef.update({
+            status: "failed",
+            error: message,
+            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } catch (updateError) {
           console.error(
-              `notificationRequests/${requestId} silinemedi: ${deleteError}`,
+              `notificationRequests/${requestId} güncellenemedi: ` +
+              `${updateError}`,
           );
         }
       }
+    },
+);
+
+exports.cleanupOldNotificationRequests = onSchedule(
+    {
+      schedule: "every day 03:00",
+      timeZone: "Europe/Istanbul",
+    },
+    async () => {
+      const cutoff = admin.firestore.Timestamp.fromMillis(
+          Date.now() - 30 * 24 * 60 * 60 * 1000,
+      );
+
+      const snapshot = await admin.firestore()
+          .collection("notificationRequests")
+          .where("createdAt", "<", cutoff)
+          .get();
+
+      if (snapshot.empty) {
+        console.log("Silinecek eski notificationRequests dokümanı yok.");
+        return;
+      }
+
+      const commits = [];
+      let batch = admin.firestore().batch();
+      let count = 0;
+
+      for (const doc of snapshot.docs) {
+        batch.delete(doc.ref);
+        count++;
+        if (count === 500) {
+          commits.push(batch.commit());
+          batch = admin.firestore().batch();
+          count = 0;
+        }
+      }
+      if (count > 0) {
+        commits.push(batch.commit());
+      }
+
+      await Promise.all(commits);
+      console.log(
+          `${snapshot.size} adet eski notificationRequests dokümanı silindi.`,
+      );
     },
 );
