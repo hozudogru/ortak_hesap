@@ -172,6 +172,8 @@ const Map<String, String> stringsEn = {
   'debt_reminder_title': 'Debt Reminder',
   'debt_reminder_body': '{from} is reminding you to pay {amount}.',
   'payment_recorded': 'Payment recorded',
+  'expense_added_notif_title': 'New Expense',
+  'expense_added_notif_body': 'A new expense was added to {group}.',
 
   'chart_no_data': 'No data',
   'chart_single_payer': '{name}\npaid {amount}',

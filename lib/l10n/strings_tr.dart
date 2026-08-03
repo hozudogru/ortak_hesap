@@ -172,6 +172,8 @@ const Map<String, String> stringsTr = {
   'debt_reminder_title': 'Borç Hatırlatma',
   'debt_reminder_body': '{from} senden {amount} ödeme yapmanı hatırlatıyor.',
   'payment_recorded': 'Ödeme kaydedildi',
+  'expense_added_notif_title': 'Yeni Harcama',
+  'expense_added_notif_body': '{group} grubuna yeni harcama eklendi.',
 
   'chart_no_data': 'Veri yok',
   'chart_single_payer': '{name}\n{amount} ödedi',

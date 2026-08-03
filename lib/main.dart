@@ -2007,6 +2007,12 @@ pw.Widget _pdfTableCell(
         .where((e) => e.isNotEmpty && e != fromEmail)
         .toSet();
 
+    if (recipients.isEmpty) return;
+
+    final loc = AppLocalizations.of(context);
+    final title = loc.t('expense_added_notif_title');
+    final body = loc.t('expense_added_notif_body', {'group': widget.groupName});
+
     final batch = FirebaseFirestore.instance.batch();
     final requests = FirebaseFirestore.instance.collection('notificationRequests');
 
@@ -2016,15 +2022,15 @@ pw.Widget _pdfTableCell(
         'toEmail': toEmail,
         'fromEmail': fromEmail,
         'groupName': widget.groupName,
+        'title': title,
+        'body': body,
         'createdAt': FieldValue.serverTimestamp(),
         'status': 'pending',
         'isRead': false,
       });
     }
 
-    if (recipients.isNotEmpty) {
-      await batch.commit();
-    }
+    await batch.commit();
   }
 
   bool canModifyExpense(Expense expense) {
