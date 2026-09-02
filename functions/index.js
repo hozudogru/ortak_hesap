@@ -26,6 +26,26 @@ function buildFallbackMessage(data) {
         title: "Borç Hatırlatması",
         body: "Bir borç hatırlatmanız var.",
       };
+    case "payment_request":
+      return {
+        title: "Ödeme Talebi",
+        body: "Onayınızı bekleyen bir ödeme talebi var.",
+      };
+    case "payment_approved":
+      return {
+        title: "Ödeme Onaylandı",
+        body: "Bildirdiğiniz ödeme onaylandı.",
+      };
+    case "payment_rejected":
+      return {
+        title: "Ödeme Reddedildi",
+        body: "Bildirdiğiniz ödeme reddedildi.",
+      };
+    case "payment_received_info":
+      return {
+        title: "Ödeme Bildirimi",
+        body: "Bir ödeme aldığınız bildirildi.",
+      };
     default:
       return {
         title: "Bildirim",

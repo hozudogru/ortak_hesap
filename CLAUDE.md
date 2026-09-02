@@ -6,10 +6,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Ortak Hesap** is a Turkish-language shared expense tracker mobile app (Flutter + Firebase). Users create or join groups, log expenses with flexible split modes, track who owes whom, and settle debts. The UI is entirely in Turkish.
 
+## Commands
+
+Run all Flutter commands from the repo root; Cloud Functions commands from `functions/`.
+
+```
+flutter pub get                        # install/sync Dart dependencies
+flutter analyze                        # static analysis (flutter_lints via analysis_options.yaml)
+flutter test                           # run tests (test/ currently only has the default widget_test.dart, not app-specific)
+flutter run                            # run on a connected device/emulator
+flutter build apk|appbundle|ios        # local builds (CI release builds go through Codemagic — see the `release` skill)
+
+cd functions
+npm install
+npm run serve                          # firebase emulators:start --only functions
+npm run deploy                         # firebase deploy --only functions
+npm run logs                           # firebase functions:log
+```
+
+There is no dedicated test suite for app logic (debt calculation, split types, etc.) — verify changes by running the app.
+
+Release builds (version bumping, Codemagic Android/iOS workflows, signing) are handled by the `release` skill — use it rather than reconstructing the process by hand.
+
 ## Architecture
 
 ### Single-file Flutter app
-All Dart code lives in **`lib/main.dart`** (~3600 lines). There are no separate files, feature modules, or state management packages — everything is co-located. The entry point initializes Firebase then runs `MyApp`.
+All Dart code lives in **`lib/main.dart`** (~5000 lines). There are no separate files, feature modules, or state management packages — everything is co-located. The entry point initializes Firebase then runs `MyApp`.
 
 ### Screen flow
 ```
@@ -53,4 +75,7 @@ Members can be added without a Firebase account (`isAnonymous: true`). Their ema
 
 ### Push notifications
 `functions/index.js` — a Firestore-triggered Cloud Function fires on `notificationRequests` creation, looks up the recipient's `fcmToken`, and sends via FCM Admin SDK. Debt reminders are sent by writing to this collection from the app.
+
+### Firestore security rules
+`firestore.rules` — all reads/writes require `request.auth != null` (no per-field validation beyond that), except: group `create` requires `ownerId == request.auth.uid`, group `delete` requires the caller to be the owner, and expense `update`/`delete` requires the caller to be either the expense's `createdByUid` or the group owner.
 

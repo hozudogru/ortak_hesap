@@ -916,6 +916,36 @@ class _HomePageState extends State<HomePage> {
         title: Text(AppLocalizations.of(context).t('app_title')),
         actions: [
           IconButton(
+            icon: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('notificationRequests')
+                  .where(
+                    'toEmail',
+                    isEqualTo: currentUser?.email?.trim().toLowerCase(),
+                  )
+                  .where('isRead', isEqualTo: false)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                final unreadCount = snapshot.data?.docs.where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      return data['status'] != 'failed';
+                    }).length ??
+                    0;
+                return Badge(
+                  label: Text('$unreadCount'),
+                  isLabelVisible: unreadCount > 0,
+                  child: const Icon(Icons.notifications),
+                );
+              },
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NotificationsPage()),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.group_add),
             onPressed: showJoinGroupDialog,
           ),
@@ -1928,26 +1958,182 @@ pw.Widget _pdfTableCell(
   );
   }
 
-  Future<void> markDebtAsPaid({
+  // Debtor reports "I paid" — this always needs the creditor's approval
+  // before it touches the balance, since the debtor benefits from a false claim.
+  Future<void> _sendPaymentRequest({
     required String fromEmail,
     required String toEmail,
     required double amount,
   }) async {
-    await FirebaseFirestore.instance
+    final cleanFromEmail = fromEmail.trim().toLowerCase();
+    final cleanToEmail = toEmail.trim().toLowerCase();
+
+    final requestRef = FirebaseFirestore.instance
         .collection('groups')
         .doc(widget.groupName)
-        .collection('payments')
-        .add({
-      'fromEmail': fromEmail.trim().toLowerCase(),
-      'toEmail': toEmail.trim().toLowerCase(),
+        .collection('paymentRequests')
+        .doc();
+
+    final loc = AppLocalizations.of(context);
+    final amountText = '${amount.toStringAsFixed(2)} ${widget.groupCurrency}';
+
+    final batch = FirebaseFirestore.instance.batch();
+    batch.set(requestRef, {
+      'payerEmail': cleanFromEmail,
+      'payeeEmail': cleanToEmail,
+      'initiatedBy': cleanFromEmail,
       'amount': amount,
+      'currency': widget.groupCurrency,
+      'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
     });
+    batch.set(
+      FirebaseFirestore.instance.collection('notificationRequests').doc(),
+      {
+        'type': 'payment_request',
+        'toEmail': cleanToEmail,
+        'fromEmail': cleanFromEmail,
+        'payerEmail': cleanFromEmail,
+        'payeeEmail': cleanToEmail,
+        'groupName': widget.groupName,
+        'paymentRequestId': requestRef.id,
+        'amount': amount,
+        'currency': widget.groupCurrency,
+        'title': loc.t('payment_request_notif_title'),
+        'body': loc.t('payment_request_notif_body', {'from': cleanFromEmail, 'amount': amountText}),
+        'createdAt': FieldValue.serverTimestamp(),
+        'status': 'pending',
+        'isRead': false,
+      },
+    );
+    await batch.commit();
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLocalizations.of(context).t('payment_recorded'))),
+      SnackBar(content: Text(loc.t('payment_request_sent'))),
     );
+  }
+
+  // Creditor reports "I received payment" — applied immediately, since a false
+  // claim here only hurts the creditor themself (they'd be forgiving a real debt).
+  // The debtor just gets an informational notification, no approval needed.
+  Future<void> _recordReceivedPayment({
+    required String fromEmail,
+    required String toEmail,
+    required double amount,
+  }) async {
+    final cleanFromEmail = fromEmail.trim().toLowerCase();
+    final cleanToEmail = toEmail.trim().toLowerCase();
+
+    final loc = AppLocalizations.of(context);
+    final amountText = '${amount.toStringAsFixed(2)} ${widget.groupCurrency}';
+
+    final batch = FirebaseFirestore.instance.batch();
+    batch.set(
+      FirebaseFirestore.instance
+          .collection('groups')
+          .doc(widget.groupName)
+          .collection('payments')
+          .doc(),
+      {
+        'fromEmail': cleanFromEmail,
+        'toEmail': cleanToEmail,
+        'amount': amount,
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+    );
+    batch.set(
+      FirebaseFirestore.instance.collection('notificationRequests').doc(),
+      {
+        'type': 'payment_received_info',
+        'toEmail': cleanFromEmail,
+        'fromEmail': cleanToEmail,
+        'groupName': widget.groupName,
+        'title': loc.t('payment_received_notif_title'),
+        'body': loc.t('payment_received_notif_body', {'from': cleanToEmail, 'amount': amountText}),
+        'createdAt': FieldValue.serverTimestamp(),
+        'status': 'pending',
+        'isRead': false,
+      },
+    );
+    await batch.commit();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(loc.t('payment_recorded'))),
+    );
+  }
+
+  Future<void> _showPaymentRequestDialog({
+    required String fromEmail,
+    required String toEmail,
+    required double maxAmount,
+    required bool initiatedByCreditor,
+  }) async {
+    final controller = TextEditingController(text: maxAmount.toStringAsFixed(2));
+    final loc = AppLocalizations.of(context);
+    String? errorText;
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              title: Text(initiatedByCreditor
+                  ? loc.t('payment_received_dialog_title')
+                  : loc.t('payment_amount_dialog_title')),
+              content: TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: loc.t('payment_amount_label', {'max': maxAmount.toStringAsFixed(2)}),
+                  hintText: loc.t('payment_amount_hint'),
+                  errorText: errorText,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text(loc.t('common_cancel')),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final amount = double.tryParse(controller.text.trim().replaceAll(',', '.'));
+                    if (amount == null || amount <= 0 || amount > maxAmount + 0.01) {
+                      setDialogState(() {
+                        errorText = loc.t('payment_invalid_amount', {'max': maxAmount.toStringAsFixed(2)});
+                      });
+                      return;
+                    }
+                    Navigator.pop(dialogContext);
+                    if (initiatedByCreditor) {
+                      await _recordReceivedPayment(fromEmail: fromEmail, toEmail: toEmail, amount: amount);
+                    } else {
+                      await _sendPaymentRequest(fromEmail: fromEmail, toEmail: toEmail, amount: amount);
+                    }
+                  },
+                  child: Text(initiatedByCreditor ? loc.t('payment_save_button') : loc.t('payment_send_request')),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  ({String fromEmail, String toEmail, double amount})? _parseDebtLine(String debt) {
+    final parts = debt.split('→');
+    if (parts.length < 2 || !parts[1].contains(':')) return null;
+    final fromEmail = parts[0].trim().toLowerCase();
+    final rightPart = parts[1].trim();
+    final toEmail = rightPart.split(':')[0].trim().toLowerCase();
+    final amountText = rightPart.split(':')[1].replaceAll(widget.groupCurrency, '').trim();
+    final amount = double.tryParse(amountText.replaceAll(',', '.'));
+    if (amount == null) return null;
+    return (fromEmail: fromEmail, toEmail: toEmail, amount: amount);
   }
 
   Future<void> sendDebtReminder({
@@ -4051,10 +4237,20 @@ void showEditExpenseDialog(
     return _sortNewestFirst ? db.compareTo(da) : da.compareTo(db);
   });
 
+  // Only show expenses the current user is actually involved with —
+  // participant, payer, the one who logged it, or the group owner.
+  final currentEmail = FirebaseAuth.instance.currentUser?.email?.trim().toLowerCase() ?? '';
+  final currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+  final visible = sorted.where((e) =>
+      _isOwner ||
+      e.paidBy == currentEmail ||
+      e.participants.contains(currentEmail) ||
+      (e.createdByUid.isNotEmpty && e.createdByUid == currentUid)).toList();
+
   // Filter by person + role
   final filtered = _filterEmail == null
-      ? sorted
-      : sorted.where((e) {
+      ? visible
+      : visible.where((e) {
           final paid = e.paidBy == _filterEmail;
           final participated = e.participants.contains(_filterEmail);
           if (_roleFilter == 'paid') return paid;
@@ -4187,6 +4383,16 @@ void showEditExpenseDialog(
                 children: filtered.map((expense) {
       final payerName = resolveDisplayName(expense.paidBy, emailToName);
 
+      double? myShare;
+      if (expense.participants.contains(currentEmail)) {
+        if ((expense.splitType == "custom" || expense.splitType == "weighted") &&
+            expense.shares.isNotEmpty) {
+          myShare = expense.shares[currentEmail];
+        } else {
+          myShare = expense.amount / expense.participants.length;
+        }
+      }
+
       return Card(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -4293,20 +4499,35 @@ void showEditExpenseDialog(
               ),
             ],
           ),
-          trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.teal.withOpacity(0.10),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Text(
-              '${expense.amount.toStringAsFixed(2)} ${expense.currency}',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: Colors.teal,
+          trailing: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  '${expense.amount.toStringAsFixed(2)} ${expense.currency}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: Colors.teal,
+                  ),
+                ),
               ),
-            ),
+              if (myShare != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  AppLocalizations.of(context).t('expense_my_share_prefix', {
+                    'amount': '${myShare.toStringAsFixed(2)} ${expense.currency}',
+                  }),
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ],
+            ],
           ),
           onTap: () {
             if (!canModifyExpense(expense)) {
@@ -4556,6 +4777,10 @@ void showEditExpenseDialog(
             emailToName.forEach((email, name) {
               displayDebt = displayDebt.replaceAll(email, name);
             });
+            final parsed = _parseDebtLine(debt);
+            final currentEmail = FirebaseAuth.instance.currentUser?.email?.trim().toLowerCase() ?? '';
+            final isDebtor = parsed != null && parsed.fromEmail == currentEmail;
+            final isCreditor = parsed != null && parsed.toEmail == currentEmail;
             return Card(
               margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: ListTile(
@@ -4585,20 +4810,28 @@ void showEditExpenseDialog(
                         }
                       },
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.check_circle, color: Colors.green),
-                      onPressed: () async {
-                        final parts = debt.split('→');
-                        if (parts.length < 2 || !parts[1].contains(':')) return;
-                        final fromEmail = parts[0].trim().toLowerCase();
-                        final rightPart = parts[1].trim();
-                        final toEmail = rightPart.split(':')[0].trim().toLowerCase();
-                        final amountText = rightPart.split(':')[1].replaceAll('$groupCurrency', '').trim();
-                        final amount = double.tryParse(amountText.replaceAll(',', '.'));
-                        if (amount == null) return;
-                        await markDebtAsPaid(fromEmail: fromEmail, toEmail: toEmail, amount: amount);
-                      },
-                    ),
+                    if (isDebtor)
+                      IconButton(
+                        icon: const Icon(Icons.payments, color: Colors.green),
+                        tooltip: AppLocalizations.of(context).t('payment_pay_button'),
+                        onPressed: () => _showPaymentRequestDialog(
+                          fromEmail: parsed.fromEmail,
+                          toEmail: parsed.toEmail,
+                          maxAmount: parsed.amount,
+                          initiatedByCreditor: false,
+                        ),
+                      ),
+                    if (isCreditor)
+                      IconButton(
+                        icon: const Icon(Icons.call_received, color: Colors.green),
+                        tooltip: AppLocalizations.of(context).t('payment_received_button'),
+                        onPressed: () => _showPaymentRequestDialog(
+                          fromEmail: parsed.fromEmail,
+                          toEmail: parsed.toEmail,
+                          maxAmount: parsed.amount,
+                          initiatedByCreditor: true,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -4890,6 +5123,227 @@ class _GroupQrScannerPageState extends State<GroupQrScannerPage> {
     );
   }
 }
+Future<void> _approvePaymentRequest({
+  required BuildContext context,
+  required DocumentReference notifRef,
+  required Map<String, dynamic> data,
+  required double approvedAmount,
+}) async {
+  final loc = AppLocalizations.of(context);
+  final groupName = (data['groupName'] ?? '').toString();
+  final paymentRequestId = (data['paymentRequestId'] ?? '').toString();
+  // fromEmail/toEmail on the notification route the request (initiator → approver),
+  // which isn't necessarily debtor → creditor once either side can initiate —
+  // payerEmail/payeeEmail always carry the actual debtor/creditor direction.
+  final fromEmail = (data['fromEmail'] ?? '').toString().trim().toLowerCase();
+  final toEmail = (data['toEmail'] ?? '').toString().trim().toLowerCase();
+  final payerEmail = (data['payerEmail'] ?? data['fromEmail'] ?? '').toString().trim().toLowerCase();
+  final payeeEmail = (data['payeeEmail'] ?? data['toEmail'] ?? '').toString().trim().toLowerCase();
+  final currency = (data['currency'] ?? '').toString();
+  if (groupName.isEmpty || paymentRequestId.isEmpty) return;
+
+  final approvedTitle = loc.t('payment_approved_notif_title');
+  final approvedBody = loc.t('payment_approved_notif_body', {
+    'to': toEmail,
+    'amount': '${approvedAmount.toStringAsFixed(2)} $currency'.trim(),
+  });
+
+  final groupRef = FirebaseFirestore.instance.collection('groups').doc(groupName);
+  final batch = FirebaseFirestore.instance.batch();
+
+  batch.set(groupRef.collection('payments').doc(), {
+    'fromEmail': payerEmail,
+    'toEmail': payeeEmail,
+    'amount': approvedAmount,
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+  batch.update(groupRef.collection('paymentRequests').doc(paymentRequestId), {
+    'status': 'approved',
+    'approvedAmount': approvedAmount,
+    'resolvedAt': FieldValue.serverTimestamp(),
+  });
+  batch.update(notifRef, {
+    'isRead': true,
+    'readAt': FieldValue.serverTimestamp(),
+  });
+  batch.set(FirebaseFirestore.instance.collection('notificationRequests').doc(), {
+    'type': 'payment_approved',
+    'toEmail': fromEmail,
+    'fromEmail': toEmail,
+    'groupName': groupName,
+    'title': approvedTitle,
+    'body': approvedBody,
+    'createdAt': FieldValue.serverTimestamp(),
+    'status': 'pending',
+    'isRead': false,
+  });
+
+  await batch.commit();
+}
+
+Future<void> _rejectPaymentRequest({
+  required BuildContext context,
+  required DocumentReference notifRef,
+  required Map<String, dynamic> data,
+}) async {
+  final loc = AppLocalizations.of(context);
+  final groupName = (data['groupName'] ?? '').toString();
+  final paymentRequestId = (data['paymentRequestId'] ?? '').toString();
+  final fromEmail = (data['fromEmail'] ?? '').toString().trim().toLowerCase();
+  final toEmail = (data['toEmail'] ?? '').toString().trim().toLowerCase();
+  if (groupName.isEmpty || paymentRequestId.isEmpty) return;
+
+  final rejectedTitle = loc.t('payment_rejected_notif_title');
+  final rejectedBody = loc.t('payment_rejected_notif_body', {'to': toEmail});
+
+  final groupRef = FirebaseFirestore.instance.collection('groups').doc(groupName);
+  final batch = FirebaseFirestore.instance.batch();
+
+  batch.update(groupRef.collection('paymentRequests').doc(paymentRequestId), {
+    'status': 'rejected',
+    'resolvedAt': FieldValue.serverTimestamp(),
+  });
+  batch.update(notifRef, {
+    'isRead': true,
+    'readAt': FieldValue.serverTimestamp(),
+  });
+  batch.set(FirebaseFirestore.instance.collection('notificationRequests').doc(), {
+    'type': 'payment_rejected',
+    'toEmail': fromEmail,
+    'fromEmail': toEmail,
+    'groupName': groupName,
+    'title': rejectedTitle,
+    'body': rejectedBody,
+    'createdAt': FieldValue.serverTimestamp(),
+    'status': 'pending',
+    'isRead': false,
+  });
+
+  await batch.commit();
+}
+
+class _PaymentRequestCard extends StatefulWidget {
+  final QueryDocumentSnapshot doc;
+  final Map<String, dynamic> data;
+
+  const _PaymentRequestCard({super.key, required this.doc, required this.data});
+
+  @override
+  State<_PaymentRequestCard> createState() => _PaymentRequestCardState();
+}
+
+class _PaymentRequestCardState extends State<_PaymentRequestCard> {
+  late final TextEditingController _controller;
+  bool _busy = false;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    final amount = (widget.data['amount'] as num?)?.toDouble() ?? 0;
+    _controller = TextEditingController(text: amount.toStringAsFixed(2));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    return Card(
+      margin: const EdgeInsets.all(8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.notifications_active, color: Colors.teal),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    (widget.data['title'] ?? '').toString(),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text((widget.data['body'] ?? '').toString()),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _controller,
+              enabled: !_busy,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: loc.t('payment_amount_label', {
+                  'max': ((widget.data['amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2),
+                }),
+                errorText: _errorText,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: _busy ? null : () => _handleReject(context),
+                  child: Text(loc.t('payment_reject_button'), style: const TextStyle(color: Colors.red)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _busy ? null : () => _handleApprove(context),
+                  child: Text(loc.t('payment_approve_button')),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleApprove(BuildContext context) async {
+    final loc = AppLocalizations.of(context);
+    final requested = (widget.data['amount'] as num?)?.toDouble() ?? 0;
+    final amount = double.tryParse(_controller.text.trim().replaceAll(',', '.'));
+    if (amount == null || amount <= 0 || amount > requested + 0.01) {
+      setState(() {
+        _errorText = loc.t('payment_invalid_amount', {'max': requested.toStringAsFixed(2)});
+      });
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _errorText = null;
+    });
+    await _approvePaymentRequest(
+      context: context,
+      notifRef: widget.doc.reference,
+      data: widget.data,
+      approvedAmount: amount,
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(loc.t('payment_request_approved_snack'))),
+    );
+  }
+
+  Future<void> _handleReject(BuildContext context) async {
+    final loc = AppLocalizations.of(context);
+    setState(() => _busy = true);
+    await _rejectPaymentRequest(context: context, notifRef: widget.doc.reference, data: widget.data);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(loc.t('payment_request_rejected_snack'))),
+    );
+  }
+}
+
 class NotificationsPage extends StatelessWidget {
   const NotificationsPage({super.key});
 
@@ -4923,6 +5377,11 @@ class NotificationsPage extends StatelessWidget {
           return ListView(
             children: docs.map((doc) {
               final data = doc.data() as Map<String, dynamic>;
+
+              if (data['type'] == 'payment_request' && data['isRead'] != true) {
+                return _PaymentRequestCard(key: ValueKey(doc.id), doc: doc, data: data);
+              }
+
               return Card(
                 margin: const EdgeInsets.all(8),
                 child: ListTile(
