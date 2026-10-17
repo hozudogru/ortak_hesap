@@ -153,9 +153,15 @@ exports.sendNotificationRequest = onDocumentCreated(
           if (result.success) return;
 
           const token = tokens[index];
+          const err = result.error || {};
+          const errorDetail = JSON.stringify({
+            code: err.code,
+            message: err.message,
+            errorInfo: err.errorInfo,
+          });
           const errorMessage =
               `notificationRequests/${requestId}: token gönderim hatası ` +
-              `(${token}): ${result.error}`;
+              `(${token}): ${result.error} ${errorDetail}`;
           console.error(errorMessage);
           errorMessages.push(errorMessage);
 

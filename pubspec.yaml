@@ -17,7 +17,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
 
-version: 1.0.10+38
+version: 1.0.11+39
 
 
 environment:
@@ -80,10 +80,17 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-flutter_icons:
+# Simgeler: `dart run flutter_launcher_icons` ile üretilir.
+# iOS: assets/icon.png. Android: aynı çizim, ama adaptive icon olarak
+# (arka plan = gradyan, ön plan = figürler) ki launcher maskesi iOS'taki
+# görünümü versin; eski cihazlar için köşeleri saydam legacy simge.
+flutter_launcher_icons:
   android: true
-  ios: true
+  ios: false   # iOS simgeleri hazır; araç her çalıştığında fazladan boyut ekleyip pbxproj'u değiştiriyor
   image_path: "assets/icon.png"
+  image_path_android: "assets/icon_android_legacy.png"
+  adaptive_icon_background: "assets/icon_adaptive_bg.png"
+  adaptive_icon_foreground: "assets/icon_adaptive_fg.png"
 
   # To add assets to your application, add an assets section, like this:
   # assets:

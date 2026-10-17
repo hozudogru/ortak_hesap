@@ -46,6 +46,11 @@ Future<void> _initLocalNotifications() async {
     final notification = message.notification;
     if (notification == null) return;
 
+    // iOS ön planda FCM bildirimini (coin.wav sesiyle) kendisi gösterir,
+    // bkz. setForegroundNotificationPresentationOptions. Yerel bildirim
+    // yalnızca Android için gerekli; iOS'ta çift bildirim/çift ses olmasın.
+    if (!Platform.isAndroid) return;
+
     flutterLocalNotificationsPlugin.show(
       id: notification.hashCode,
       title: notification.title,
@@ -374,6 +379,157 @@ class _HomePageState extends State<HomePage> {
     final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
     final data = doc.data();
     return (data?['name'] ?? data?['nickname'] ?? email.split('@').first).toString();
+  }
+
+  /// Profil düzenleme: ad ve takma ad users/{uid} belgesine yazılır ve
+  /// kullanıcının üye olduğu tüm grupların members/{uid} belgesine yansıtılır.
+  Future<void> showProfileDialog() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final loc = AppLocalizations.of(context);
+
+    final userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    final data = userDoc.data() ?? {};
+    final email = user.email?.trim().toLowerCase() ?? '';
+    final nameController = TextEditingController(
+        text: (data['name'] ?? email.split('@').first).toString());
+    final nicknameController = TextEditingController(
+        text: (data['nickname'] ?? data['name'] ?? '').toString());
+    if (!mounted) return;
+
+    var saving = false;
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              title: Text(loc.t('profile_title')),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: TextEditingController(text: email),
+                      readOnly: true,
+                      enabled: false,
+                      decoration: InputDecoration(labelText: loc.t('profile_email_label')),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: nameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: InputDecoration(labelText: loc.t('profile_name_label')),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: nicknameController,
+                      decoration: InputDecoration(
+                        labelText: loc.t('profile_nickname_label'),
+                        helperText: loc.t('profile_nickname_help'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.lock_reset, size: 18),
+                        label: Text(loc.t('profile_reset_password')),
+                        onPressed: () async {
+                          try {
+                            await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+                            if (!dialogContext.mounted) return;
+                            ScaffoldMessenger.of(dialogContext).showSnackBar(
+                              SnackBar(content: Text(loc.t('profile_reset_password_sent'))),
+                            );
+                          } catch (e) {
+                            if (!dialogContext.mounted) return;
+                            ScaffoldMessenger.of(dialogContext).showSnackBar(
+                              SnackBar(content: Text(loc.t('generic_error', {'error': '$e'}))),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: saving ? null : () => Navigator.pop(dialogContext),
+                  child: Text(loc.t('common_cancel')),
+                ),
+                ElevatedButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          final name = nameController.text.trim();
+                          final nickname = nicknameController.text.trim();
+                          if (name.isEmpty) {
+                            ScaffoldMessenger.of(dialogContext).showSnackBar(
+                              SnackBar(content: Text(loc.t('profile_name_required'))),
+                            );
+                            return;
+                          }
+                          setDialogState(() => saving = true);
+                          try {
+                            await _saveProfile(user, name, nickname.isEmpty ? name : nickname);
+                            if (!dialogContext.mounted) return;
+                            Navigator.pop(dialogContext);
+                            if (!mounted) return;
+                            setState(() {});
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(loc.t('profile_saved'))),
+                            );
+                          } catch (e) {
+                            if (!dialogContext.mounted) return;
+                            setDialogState(() => saving = false);
+                            ScaffoldMessenger.of(dialogContext).showSnackBar(
+                              SnackBar(content: Text(loc.t('generic_error', {'error': '$e'}))),
+                            );
+                          }
+                        },
+                  child: saving
+                      ? const SizedBox(
+                          width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : Text(loc.t('common_save')),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _saveProfile(User user, String name, String nickname) async {
+    final firestore = FirebaseFirestore.instance;
+    await firestore.collection('users').doc(user.uid).set({
+      'name': name,
+      'nickname': nickname,
+    }, SetOptions(merge: true));
+    try {
+      await user.updateDisplayName(name);
+    } catch (_) {
+      // Auth profili güncellenemese de Firestore kayıtları geçerli.
+    }
+
+    // Üye olunan gruplardaki members/{uid} belgelerini de güncelle.
+    final groups = await firestore
+        .collection('groups')
+        .where('memberIds', arrayContains: user.uid)
+        .get();
+    final batch = firestore.batch();
+    var pending = 0;
+    for (final group in groups.docs) {
+      final memberRef = group.reference.collection('members').doc(user.uid);
+      final memberSnap = await memberRef.get();
+      if (!memberSnap.exists) continue;
+      batch.update(memberRef, {'name': name, 'nickname': nickname});
+      pending++;
+    }
+    if (pending > 0) await batch.commit();
   }
 
   Future<void> addGroupToFirebase(String groupName, String currency) async {
@@ -952,7 +1108,9 @@ class _HomePageState extends State<HomePage> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
-              if (value == 'logout') {
+              if (value == 'profile') {
+                showProfileDialog();
+              } else if (value == 'logout') {
                 FirebaseAuth.instance.signOut();
               } else if (value == 'delete_account') {
                 showDeleteAccountDialog();
@@ -961,6 +1119,13 @@ class _HomePageState extends State<HomePage> {
             itemBuilder: (context) {
               final loc = AppLocalizations.of(context);
               return [
+                PopupMenuItem(
+                  value: 'profile',
+                  child: ListTile(
+                    leading: const Icon(Icons.person),
+                    title: Text(loc.t('home_menu_profile')),
+                  ),
+                ),
                 PopupMenuItem(
                   value: 'logout',
                   child: ListTile(
@@ -2276,12 +2441,57 @@ pw.Widget _pdfTableCell(
   }
 
   Future<void> deleteMemberFromFirebase(String memberDocId) async {
-    await FirebaseFirestore.instance
-        .collection('groups')
-        .doc(widget.groupName)
-        .collection('members')
-        .doc(memberDocId)
-        .delete();
+    // Gerçek üyelerde üye belgesinin ID'si kullanıcının uid'sidir; memberIds'den
+    // de çıkarılmazsa kişi grubu ana sayfada görmeye devam eder ve üyesi olmadığı
+    // grubu açar. Anonim üyelerde ID uid değildir, arrayRemove zararsızdır.
+    final groupRef = FirebaseFirestore.instance.collection('groups').doc(widget.groupName);
+    final batch = FirebaseFirestore.instance.batch();
+    batch.delete(groupRef.collection('members').doc(memberDocId));
+    batch.update(groupRef, {
+      'memberIds': FieldValue.arrayRemove([memberDocId]),
+    });
+    await batch.commit();
+  }
+
+  /// Kullanıcı grubun üye listesinde yoksa (eski bir çıkarma işleminden kalan
+  /// tutarsız memberIds kaydı) grubu açmak yerine bunu söyle ve kaydı temizle.
+  Widget _buildNotMemberView() {
+    final loc = AppLocalizations.of(context);
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.groupName)),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.group_off, size: 48, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text(loc.t('group_not_member_title'),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 8),
+              Text(loc.t('group_not_member_body'), textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.logout),
+                label: Text(loc.t('group_not_member_leave')),
+                onPressed: () async {
+                  final uid = FirebaseAuth.instance.currentUser?.uid;
+                  if (uid != null) {
+                    await FirebaseFirestore.instance
+                        .collection('groups')
+                        .doc(widget.groupName)
+                        .update({'memberIds': FieldValue.arrayRemove([uid])});
+                  }
+                  if (mounted) Navigator.of(context).pop();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void showAddExpenseDialog(List<String> memberEmails, Map<String, String> emailToName) async {
@@ -3907,6 +4117,14 @@ void showEditExpenseDialog(
           return (data['email'] ?? '').toString().trim().toLowerCase();
         }).where((email) => email.isNotEmpty).toList();
 
+        final currentEmailForGuard =
+            FirebaseAuth.instance.currentUser?.email?.trim().toLowerCase() ?? '';
+        if (memberSnapshot.hasData &&
+            !_isOwner &&
+            !memberEmails.contains(currentEmailForGuard)) {
+          return _buildNotMemberView();
+        }
+
         final Map<String, String> emailToName = {};
         final Map<String, String> emailToDocId = {};
         for (final doc in memberDocs) {
@@ -3918,6 +4136,20 @@ void showEditExpenseDialog(
             emailToDocId[email] = doc.id;
           }
         }
+
+        // Aynı görünen ada sahip üyeler (ör. iki hesabı olan bir kişi) borç
+        // satırlarında ve seçim listelerinde ayırt edilemiyordu; ad çakışıyorsa
+        // yanına e-postayı ekle.
+        final Map<String, int> nameCounts = {};
+        for (final name in emailToName.values) {
+          nameCounts[name] = (nameCounts[name] ?? 0) + 1;
+        }
+        emailToName.updateAll((email, name) {
+          if ((nameCounts[name] ?? 0) > 1 && !email.startsWith('anonymous_')) {
+            return '$name ($email)';
+          }
+          return name;
+        });
 
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
@@ -4173,9 +4405,21 @@ void showEditExpenseDialog(
                         ),
                       ],
                     ),
-                    floatingActionButton: FloatingActionButton(
-                      onPressed: () => showAddExpenseDialog(memberEmails, emailToName),
-                      child: const Icon(Icons.add),
+                    // Harcama ekle düğmesi yalnızca Harcamalar sekmesinde görünsün;
+                    // diğer sekmelerde alttaki satırların/düğmelerin üstüne biniyordu.
+                    floatingActionButton: Builder(
+                      builder: (tabContext) {
+                        final tabController = DefaultTabController.of(tabContext);
+                        return AnimatedBuilder(
+                          animation: tabController,
+                          builder: (_, _) => tabController.index == 0
+                              ? FloatingActionButton(
+                                  onPressed: () => showAddExpenseDialog(memberEmails, emailToName),
+                                  child: const Icon(Icons.add),
+                                )
+                              : const SizedBox.shrink(),
+                        );
+                      },
                     ),
                   ),
                 );
@@ -4380,6 +4624,8 @@ void showEditExpenseDialog(
         child: filtered.isEmpty
             ? Center(child: Text(AppLocalizations.of(context).t('expense_none_for_person')))
             : ListView(
+                // Son kartın yüzen düğmenin altında kalmaması için alt boşluk.
+                padding: const EdgeInsets.only(bottom: 88),
                 children: filtered.map((expense) {
       final payerName = resolveDisplayName(expense.paidBy, emailToName);
 
@@ -4781,6 +5027,11 @@ void showEditExpenseDialog(
             final currentEmail = FirebaseAuth.instance.currentUser?.email?.trim().toLowerCase() ?? '';
             final isDebtor = parsed != null && parsed.fromEmail == currentEmail;
             final isCreditor = parsed != null && parsed.toEmail == currentEmail;
+            // Hatırlatma borçluya gider; borçlu kendisiyse veya anonim üyeyse
+            // (hesabı/token'ı yok) fonksiyon isteği zaten düşürür, düğmeyi gösterme.
+            final debtorIsAnonymous =
+                parsed != null && parsed.fromEmail.startsWith('anonymous_');
+            final canRemind = parsed != null && !isDebtor && !debtorIsAnonymous;
             return Card(
               margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: ListTile(
@@ -4789,6 +5040,7 @@ void showEditExpenseDialog(
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (canRemind)
                     IconButton(
                       icon: const Icon(Icons.notifications_active),
                       onPressed: () async {
