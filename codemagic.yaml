@@ -10,11 +10,13 @@ workflows:
       xcode: latest
       cocoapods: default
 
+      # Otomatik imzalama: Codemagic, Codemagic3 App Store Connect anahtarıyla
+      # oğlunuzun ekibinden (L8VSGNGQPG) dağıtım sertifikasını ve App Store
+      # profilini kendisi alır/oluşturur. Eski ekibe ait ortakhesap-cert /
+      # ortakhesap-profile kullanılmıyor.
       ios_signing:
-        certificates:
-          - ortakhesap-cert
-        provisioning_profiles:
-          - ortakhesap-profile
+        distribution_type: app_store
+        bundle_identifier: com.hasimozudogru.ortakhesap
 
     scripts:
       - name: Install dependencies
