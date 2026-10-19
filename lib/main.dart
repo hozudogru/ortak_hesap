@@ -143,6 +143,43 @@ Future<void> saveFcmToken() async {
   }
 }
 
+/// Kuruşa yuvarlar; 33.333… gibi kayan nokta kalıntılarını temizler.
+double roundCents(double value) => (value * 100).round() / 100;
+
+/// Sıfıra yakın bakiyeleri (yarım kuruşun altı) sıfır kabul etmek için eşik.
+const double kBalanceEpsilon = 0.005;
+
+/// Bir harcamanın katılımcı paylarını kuruş cinsinden kesin hesaplar.
+/// Yuvarlamadan kalan kuruş farkı ödeyene (katılımcıysa) yoksa ilk
+/// katılımcıya yazılır; böylece payların toplamı her zaman tutara eşittir.
+Map<String, double> splitExpenseShares({
+  required double amount,
+  required String paidBy,
+  required List<String> participants,
+  required String splitType,
+  required Map<String, double> shares,
+}) {
+  final Map<String, double> result = {};
+  if ((splitType == 'custom' || splitType == 'weighted') && shares.isNotEmpty) {
+    shares.forEach((email, share) {
+      result[email] = roundCents((result[email] ?? 0) + share);
+    });
+  } else {
+    if (participants.isEmpty) return result;
+    final share = roundCents(amount / participants.length);
+    for (final participant in participants) {
+      result[participant] = roundCents((result[participant] ?? 0) + share);
+    }
+  }
+  final assigned = result.values.fold(0.0, (sum, value) => sum + value);
+  final remainder = roundCents(amount - assigned);
+  if (remainder != 0 && result.isNotEmpty) {
+    final target = result.containsKey(paidBy) ? paidBy : result.keys.first;
+    result[target] = roundCents(result[target]! + remainder);
+  }
+  return result;
+}
+
 class Expense {
   final String id;
   final String title;
@@ -1652,25 +1689,25 @@ for (final expense in expenses) {
 
   balances[paidBy] = (balances[paidBy] ?? 0) + amount;
 
-  if ((splitType == 'custom' || splitType == 'weighted') && shares.isNotEmpty) {
-    shares.forEach((participant, shareAmount) {
-      balances[participant] = (balances[participant] ?? 0) - shareAmount;
-    });
-  } else {
-    final double share = amount / participants.length;
-    for (final participant in participants) {
-      balances[participant] = (balances[participant] ?? 0) - share;
-    }
-  }
+  splitExpenseShares(
+    amount: amount,
+    paidBy: paidBy,
+    participants: participants,
+    splitType: splitType,
+    shares: shares,
+  ).forEach((participant, shareAmount) {
+    balances[participant] = (balances[participant] ?? 0) - shareAmount;
+  });
 }
+balances.updateAll((_, value) => roundCents(value));
 
 final List<Map<String, dynamic>> debtors = [];
 final List<Map<String, dynamic>> creditors = [];
 
 balances.forEach((person, balance) {
-  if (balance < -0.01) {
+  if (balance < -kBalanceEpsilon) {
     debtors.add({'person': person, 'amount': -balance});
-  } else if (balance > 0.01) {
+  } else if (balance > kBalanceEpsilon) {
     creditors.add({'person': person, 'amount': balance});
   }
 });
@@ -3185,23 +3222,19 @@ void showEditExpenseDialog(
     balance[expense.paidBy] =
         (balance[expense.paidBy] ?? 0) + expense.amount;
 
-    if ((expense.splitType == "custom" || expense.splitType == "weighted") &&
-        expense.shares.isNotEmpty) {
-      expense.shares.forEach((email, shareAmount) {
-        balance[email] = (balance[email] ?? 0) - shareAmount;
-      });
-    } else {
-      if (expense.participants.isEmpty) continue;
-
-      final share = expense.amount / expense.participants.length;
-
-      for (final participant in expense.participants) {
-        balance[participant] =
-            (balance[participant] ?? 0) - share;
-      }
-    }
+    splitExpenseShares(
+      amount: expense.amount,
+      paidBy: expense.paidBy,
+      participants: expense.participants,
+      splitType: expense.splitType,
+      shares: expense.shares,
+    ).forEach((email, shareAmount) {
+      balance[email] = (balance[email] ?? 0) - shareAmount;
+    });
   }
 
+  // Tüm bakiyeler kuruş cinsinden; kalıntı kalmaz.
+  balance.updateAll((_, value) => roundCents(value));
   return balance;
 }
 
@@ -3214,6 +3247,7 @@ void showEditExpenseDialog(
       updatedBalance[payment.fromEmail] = (updatedBalance[payment.fromEmail] ?? 0) + payment.amount;
       updatedBalance[payment.toEmail] = (updatedBalance[payment.toEmail] ?? 0) - payment.amount;
     }
+    updatedBalance.updateAll((_, value) => roundCents(value));
     return updatedBalance;
   }
 
@@ -3226,9 +3260,9 @@ void showEditExpenseDialog(
     final List<List<dynamic>> debtors = [];
 
     balance.forEach((email, value) {
-      if (value > 0.01) {
+      if (value > kBalanceEpsilon) {
         creditors.add([email, value]);
-      } else if (value < -0.01) {
+      } else if (value < -kBalanceEpsilon) {
         debtors.add([email, value.abs()]);
       }
     });
@@ -3247,8 +3281,8 @@ void showEditExpenseDialog(
       final double paymentAmount =
           debtorAmount < creditorAmount ? debtorAmount : creditorAmount;
 
-      // Floating point kalıntılarını (< 0.01) satır olarak gösterme
-      if (paymentAmount > 0.01) {
+      // Yarım kuruşun altındaki kalıntıları satır olarak gösterme
+      if (paymentAmount > kBalanceEpsilon) {
         result.add(
           '${debtors[i][0]} → ${creditors[j][0]}: ${paymentAmount.toStringAsFixed(2)}  $groupCurrency',
         );
@@ -3257,8 +3291,8 @@ void showEditExpenseDialog(
       debtors[i][1] = debtorAmount - paymentAmount;
       creditors[j][1] = creditorAmount - paymentAmount;
 
-      if ((debtors[i][1] as double) <= 0.01) i++;
-      if ((creditors[j][1] as double) <= 0.01) j++;
+      if ((debtors[i][1] as double) <= kBalanceEpsilon) i++;
+      if ((creditors[j][1] as double) <= kBalanceEpsilon) j++;
     }
     return result;
   }
@@ -3306,17 +3340,15 @@ void showEditExpenseDialog(
 
       balance[paidBy] = (balance[paidBy] ?? 0) + amount;
 
-      if ((splitType == 'custom' || splitType == 'weighted') && shares.isNotEmpty) {
-        shares.forEach((key, value) {
-          balance[key] = (balance[key] ?? 0) - (value as num).toDouble();
-        });
-      } else {
-        if (participants.isEmpty) continue;
-        final double share = amount / participants.length;
-        for (final p in participants) {
-          balance[p] = (balance[p] ?? 0) - share;
-        }
-      }
+      splitExpenseShares(
+        amount: amount,
+        paidBy: paidBy,
+        participants: participants,
+        splitType: splitType,
+        shares: shares.map((key, value) => MapEntry(key, (value as num).toDouble())),
+      ).forEach((key, share) {
+        balance[key] = (balance[key] ?? 0) - share;
+      });
     }
     return balance.values.fold(0.0, (s, v) => s + v);
   }
@@ -4631,12 +4663,13 @@ void showEditExpenseDialog(
 
       double? myShare;
       if (expense.participants.contains(currentEmail)) {
-        if ((expense.splitType == "custom" || expense.splitType == "weighted") &&
-            expense.shares.isNotEmpty) {
-          myShare = expense.shares[currentEmail];
-        } else {
-          myShare = expense.amount / expense.participants.length;
-        }
+        myShare = splitExpenseShares(
+          amount: expense.amount,
+          paidBy: expense.paidBy,
+          participants: expense.participants,
+          splitType: expense.splitType,
+          shares: expense.shares,
+        )[currentEmail];
       }
 
       return Card(
@@ -4924,7 +4957,7 @@ void showEditExpenseDialog(
                     : null,
                 onLongPress: () {
                   final balance = balances[email] ?? 0.0;
-                  if (balance.abs() >= 0.01) {
+                  if (balance.abs() > kBalanceEpsilon) {
                     final amountText = '${balance.abs().toStringAsFixed(2)} $groupCurrency';
                     showDialog(
                       context: context,
@@ -4994,10 +5027,10 @@ void showEditExpenseDialog(
           final name = resolveDisplayName(email, emailToName);
           Color color;
           String text;
-          if (value > 0) {
+          if (value > kBalanceEpsilon) {
             color = Colors.green;
             text = AppLocalizations.of(context).t('debt_creditor_suffix', {'amount': '${value.toStringAsFixed(2)} ${widget.groupCurrency}'});
-          } else if (value < 0) {
+          } else if (value < -kBalanceEpsilon) {
             color = Colors.red;
             text = AppLocalizations.of(context).t('debt_debtor_suffix', {'amount': '${(-value).toStringAsFixed(2)} ${widget.groupCurrency}'});
           } else {
