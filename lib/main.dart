@@ -19,6 +19,7 @@ import 'dart:io';
 
 import 'l10n/app_localizations.dart';
 import 'services/version_check_service.dart';
+import 'services/social_auth_service.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -147,6 +148,133 @@ Future<void> saveFcmToken() async {
 double roundCents(double value) => (value * 100).round() / 100;
 
 /// Sıfıra yakın bakiyeleri (yarım kuruşun altı) sıfır kabul etmek için eşik.
+/// Google/Apple girişi sonrası users/{uid} belgesini tamamlar ve FCM
+/// token'ını kaydeder. Mevcut kullanıcının adı ezilmez; ad yalnızca
+/// belge yoksa ya da boşsa yazılır (Apple adı sadece ilk girişte verir).
+Future<void> completeSocialSignIn(SocialSignInResult result) async {
+  final user = result.userCredential.user;
+  if (user == null) return;
+
+  final email = (user.email ?? '').trim().toLowerCase();
+  final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+  final existing = await userRef.get();
+  final existingName = (existing.data()?['name'] ?? '').toString().trim();
+
+  final data = <String, dynamic>{'email': email};
+  if (existingName.isEmpty) {
+    final candidate = (result.fullName ?? user.displayName ?? '').trim();
+    if (candidate.isNotEmpty) {
+      data['name'] = candidate;
+      data['nickname'] = candidate;
+      data['needsName'] = FieldValue.delete();
+      if (result.fullName != null && result.fullName!.isNotEmpty) {
+        await user.updateDisplayName(result.fullName);
+      }
+    } else {
+      // Ad alınamadı (ör. Apple "e-postamı gizle" + ikinci giriş). Geçici
+      // bir ad yaz ve HomePage'in zorunlu ad penceresini tetikle.
+      final fallback =
+          email.contains('@') ? email.split('@').first : 'Kullanıcı';
+      data['name'] = fallback;
+      data['nickname'] = fallback;
+      data['needsName'] = true;
+    }
+  }
+  await userRef.set(data, SetOptions(merge: true));
+  await saveFcmToken();
+}
+
+/// Giriş ve kayıt sayfalarında ortak kullanılan Google / Apple düğmeleri.
+class SocialSignInButtons extends StatefulWidget {
+  const SocialSignInButtons({super.key});
+
+  @override
+  State<SocialSignInButtons> createState() => _SocialSignInButtonsState();
+}
+
+class _SocialSignInButtonsState extends State<SocialSignInButtons> {
+  bool _busy = false;
+
+  Future<void> _run(Future<SocialSignInResult?> Function() signIn) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final result = await signIn();
+      if (result == null) return; // kullanıcı vazgeçti
+      await completeSocialSignIn(result);
+      // AuthGate oturumu görünce HomePage'e geçer; kayıt sayfası üstteyse kapat.
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)
+              .t('social_failed', {'error': e.message ?? e.code})),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              AppLocalizations.of(context).t('social_failed', {'error': '$e'})),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            const Expanded(child: Divider()),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(loc.t('social_or'),
+                  style: Theme.of(context).textTheme.bodySmall),
+            ),
+            const Expanded(child: Divider()),
+          ],
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _busy ? null : () => _run(SocialAuthService.signInWithGoogle),
+          icon: const Icon(Icons.g_mobiledata, size: 28),
+          label: Text(loc.t('social_google')),
+        ),
+        if (SocialAuthService.isAppleAvailable) ...[
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : () => _run(SocialAuthService.signInWithApple),
+            icon: const Icon(Icons.apple, size: 24),
+            label: Text(loc.t('social_apple')),
+          ),
+        ],
+        if (_busy)
+          const Padding(
+            padding: EdgeInsets.only(top: 12),
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 const double kBalanceEpsilon = 0.005;
 
 /// Bir harcamanın katılımcı paylarını kuruş cinsinden kesin hesaplar.
@@ -349,9 +477,103 @@ class _HomePageState extends State<HomePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkUnreadNotificationsPopup();
       VersionCheckService.check(context);
+      _checkNeedsName();
     });
   }
   bool _notificationPopupShown = false;
+  bool _needsNameDialogShown = false;
+
+  /// Sosyal girişte ad alınamadıysa (users/{uid}.needsName == true) ad
+  /// girilene kadar kapatılamayan bir pencere gösterir.
+  Future<void> _checkNeedsName() async {
+    if (_needsNameDialogShown) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final snap =
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    if (snap.data()?['needsName'] != true) return;
+    if (!mounted) return;
+    _needsNameDialogShown = true;
+
+    String name = '';
+    bool saving = false;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        final loc = AppLocalizations.of(dialogContext);
+        return PopScope(
+          canPop: false,
+          child: StatefulBuilder(
+            builder: (dialogContext, setState) => AlertDialog(
+              title: Text(loc.t('name_required_title')),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(loc.t('name_required_body')),
+                  const SizedBox(height: 12),
+                  TextField(
+                    autofocus: true,
+                    textCapitalization: TextCapitalization.words,
+                    onChanged: (v) => name = v,
+                    decoration: InputDecoration(
+                      labelText: loc.t('profile_name_label'),
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          final clean = name.trim();
+                          if (clean.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                  content:
+                                      Text(loc.t('profile_name_required'))),
+                            );
+                            return;
+                          }
+                          setState(() => saving = true);
+                          try {
+                            await _saveProfile(user, clean, clean);
+                            await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(user.uid)
+                                .set({'needsName': FieldValue.delete()},
+                                    SetOptions(merge: true));
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                          } catch (e) {
+                            setState(() => saving = false);
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                  content: Text(loc.t(
+                                      'generic_error', {'error': '$e'}))),
+                            );
+                          }
+                        },
+                  child: saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(loc.t('common_save')),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
   String _makeGroupCode() {
     final ms = DateTime.now().millisecondsSinceEpoch.toString();
     return ms.substring(ms.length - 6);
@@ -831,11 +1053,108 @@ class _HomePageState extends State<HomePage> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               onPressed: () {
                 Navigator.pop(context);
-                _showDeleteAccountPasswordDialog();
+                final providers = FirebaseAuth.instance.currentUser?.providerData
+                        .map((p) => p.providerId)
+                        .toList() ??
+                    const <String>[];
+                if (providers.contains('password') || providers.isEmpty) {
+                  _showDeleteAccountPasswordDialog();
+                } else if (providers.contains('google.com')) {
+                  _deleteAccountWithProvider('google.com');
+                } else if (providers.contains('apple.com')) {
+                  _deleteAccountWithProvider('apple.com');
+                } else {
+                  _showDeleteAccountPasswordDialog();
+                }
               },
               child: Text(loc.t('common_delete')),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  /// Google / Apple ile kayıtlı kullanıcılar için: sağlayıcıyla yeniden
+  /// doğrula (Apple'da token iptali dahil) ve hesabı sil.
+  void _deleteAccountWithProvider(String providerId) {
+    final providerName = providerId == 'apple.com' ? 'Apple' : 'Google';
+    bool isDeleting = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        final loc = AppLocalizations.of(context);
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(loc.t('delete_account_title')),
+              content: Text(loc.t('delete_account_reauth_prompt',
+                  {'provider': providerName})),
+              actions: [
+                TextButton(
+                  onPressed: isDeleting ? null : () => Navigator.pop(context),
+                  child: Text(loc.t('common_cancel')),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: isDeleting
+                      ? null
+                      : () async {
+                          setState(() => isDeleting = true);
+                          final user = FirebaseAuth.instance.currentUser;
+                          if (user == null) {
+                            Navigator.pop(context);
+                            return;
+                          }
+                          try {
+                            final ok = providerId == 'apple.com'
+                                ? await SocialAuthService
+                                    .reauthenticateWithAppleAndRevoke(user)
+                                : await SocialAuthService
+                                    .reauthenticateWithGoogle(user);
+                            if (!ok) {
+                              setState(() => isDeleting = false);
+                              return;
+                            }
+                            await _deleteAccountFully(user);
+                            await SocialAuthService.signOut();
+                            if (context.mounted) Navigator.pop(context);
+                          } on FirebaseAuthException catch (e) {
+                            setState(() => isDeleting = false);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                    content: Text(loc.t('generic_error',
+                                        {'error': '${e.message}'}))),
+                              );
+                            }
+                          } catch (e) {
+                            setState(() => isDeleting = false);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                    content: Text(loc.t(
+                                        'generic_error', {'error': '$e'}))),
+                              );
+                            }
+                          }
+                        },
+                  child: isDeleting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(loc.t('delete_account_reauth_button')),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1148,6 +1467,7 @@ class _HomePageState extends State<HomePage> {
               if (value == 'profile') {
                 showProfileDialog();
               } else if (value == 'logout') {
+                SocialAuthService.signOut();
                 FirebaseAuth.instance.signOut();
               } else if (value == 'delete_account') {
                 showDeleteAccountDialog();
@@ -3965,172 +4285,192 @@ void showEditExpenseDialog(
       );
     }
 
-    final double grandTotal = totals.values.fold(0.0, (sum, value) => sum + value);
-    final colors = [Colors.blue, Colors.red, Colors.green, Colors.orange, Colors.purple, Colors.teal];
-    final entries = totals.entries.toList();
+    final double grandTotal = totals.values.fold(0.0, (acc, value) => acc + value);
+    // 12 ayırt edilebilir renk; kalabalık gruplarda 6 renk tekrar ediyordu.
+    const colors = <Color>[
+      Colors.blue,
+      Colors.red,
+      Colors.green,
+      Colors.orange,
+      Colors.purple,
+      Colors.teal,
+      Colors.pink,
+      Colors.indigo,
+      Colors.amber,
+      Colors.cyan,
+      Colors.brown,
+      Colors.deepOrange,
+    ];
+    // Büyükten küçüğe; grafik dilimleri ile liste aynı sırada olsun.
+    final entries = totals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Column(
-              children: [
-                Text(
-                  AppLocalizations.of(context).t('chart_who_paid_title'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1E1E2E) : Colors.white;
+    final nameColor = theme.colorScheme.onSurface;
+    final mutedColor = isDark ? Colors.white60 : Colors.grey;
+    final currency = expenses.first.currency;
+
+    // Grafik sabit yükseklikte, liste altında; tüm sekme kaydırılır.
+    // Önceden grafik Expanded içindeydi ve kalabalık gruplarda kartların
+    // altında kalıyordu.
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      children: [
+        Text(
+          AppLocalizations.of(context).t('chart_who_paid_title'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          AppLocalizations.of(context).t('chart_subtitle'),
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 13, color: mutedColor),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 260,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              PieChart(
+                PieChartData(
+                  sectionsSpace: 2,
+                  centerSpaceRadius: 64,
+                  sections: List<PieChartSectionData>.generate(entries.length, (i) {
+                    final entry = entries[i];
+                    final percent = grandTotal == 0 ? 0.0 : (entry.value / grandTotal * 100);
+                    // Küçük dilimlerde yüzde yazısı üst üste biniyordu; %5 altını gizle.
+                    final showTitle = percent >= 5;
+                    return PieChartSectionData(
+                      value: entry.value,
+                      color: colors[i % colors.length],
+                      title: showTitle ? '${percent.toStringAsFixed(0)}%' : '',
+                      radius: 52,
+                      titlePositionPercentageOffset: 0.55,
+                      titleStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    );
+                  }),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  AppLocalizations.of(context).t('chart_subtitle'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey,
-                  ),
+              ),
+              SizedBox(
+                width: 112,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.pie_chart, color: Colors.deepPurple, size: 22),
+                    const SizedBox(height: 4),
+                    Text(
+                      AppLocalizations.of(context).t('chart_total'),
+                      style: TextStyle(color: mutedColor, fontSize: 11),
+                    ),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        "${grandTotal.toStringAsFixed(2)} $currency",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: nameColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      AppLocalizations.of(context).t('summary_per_person'),
+                      style: TextStyle(color: mutedColor, fontSize: 10),
+                    ),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        "${perPersonAmount.toStringAsFixed(2)} $groupCurrency",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: nameColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        ...List.generate(entries.length, (i) {
+          final entry = entries[i];
+          final color = colors[i % colors.length];
+          final name = resolveDisplayName(entry.key, emailToName);
+          final percent = grandTotal == 0 ? 0.0 : (entry.value / grandTotal * 100);
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
-          const SizedBox(height: 20),
-          Expanded(
-            child: Stack(
-              alignment: Alignment.center,
+            child: Row(
               children: [
-                PieChart(
-              PieChartData(
-                sections: List<PieChartSectionData>.generate(entries.length, (i) {
-                  final entry = entries[i];
-                  final percent = grandTotal == 0 ? 0 : (entry.value / grandTotal * 100);
-                  return PieChartSectionData(
-                    value: entry.value,
-                    color: colors[i % colors.length],
-                    title: '${percent.toStringAsFixed(0)}%',
-                    radius: 80,
-                    titleStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
-                  );
-                }),
-              ),
-                    ),
-
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.pie_chart,
-                            color: Colors.deepPurple,
-                            size: 28,
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            AppLocalizations.of(context).t('chart_total'),
-                            style: const TextStyle(
-                              color: Colors.grey,
-                              fontSize: 13,
-                            ),
-                          ),
-                          Text(
-                            "${grandTotal.toStringAsFixed(2)} ${expenses.first.currency}",
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            AppLocalizations.of(context).t('summary_per_person'),
-                            style: const TextStyle(
-                              color: Colors.grey,
-                              fontSize: 11,
-                            ),
-                          ),
-                          Text(
-                            "${perPersonAmount.toStringAsFixed(2)} $groupCurrency",
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: color,
+                  child: Text(
+                    name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: nameColor,
+                        ),
+                      ),
+                      Text(
+                        '%${percent.toStringAsFixed(1)}',
+                        style: TextStyle(fontSize: 12, color: mutedColor),
                       ),
                     ],
                   ),
                 ),
-                        
-          const SizedBox(height: 20),
-          ...List.generate(entries.length, (i) {
-            final entry = entries[i];
-            return Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 12,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: isDark ? 0.22 : 0.12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                ],
-              ),
-
-              child: Row(
-                children: [
-
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: colors[i % colors.length],
-                    child: Text(
-                      resolveDisplayName(entry.key, emailToName)
-                        .substring(0, 1).toUpperCase(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                  child: Text(
+                    "${entry.value.toStringAsFixed(2)} $currency",
+                    style: TextStyle(fontWeight: FontWeight.bold, color: color),
                   ),
-
-                  const SizedBox(width: 12),
-
-                  Expanded(
-                    child: Text(
-                        resolveDisplayName(entry.key, emailToName),
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors[i % colors.length].withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Text(
-                      "${entry.value.toStringAsFixed(2)} ${expenses.first.currency}",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: colors[i % colors.length],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
     );
   }
 
@@ -5313,8 +5653,8 @@ Future<void> showForgotPasswordDialog() async {
                 );
               },
               child: Text(AppLocalizations.of(context).t('login_register_button')),
-            )
-
+            ),
+            const SocialSignInButtons(),
           ],
         ),
       ),
@@ -5772,6 +6112,7 @@ class _RegisterPageState extends State<RegisterPage> {
               onPressed: register,
               child: Text(AppLocalizations.of(context).t('login_register_button')),
             ),
+            const SocialSignInButtons(),
           ],
         ),
       ),

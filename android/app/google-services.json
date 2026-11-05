@@ -7,12 +7,17 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:159656243067:android:f5f3d69175667b55e9d7de",
+        "mobilesdk_app_id": "1:159656243067:android:0cc1c100669f0ae6e9d7de",
         "android_client_info": {
-          "package_name": "com.example.ortak_hesap"
+          "package_name": "com.ahmetcahitozudogru.ortakhesap"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "159656243067-g8mbod35glvo8v3mjbgts7mdd7gjco06.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDh9NhuOMZyVMXsLdLmRy7BAUfP304ZpCU"
@@ -20,7 +25,55 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "159656243067-g8mbod35glvo8v3mjbgts7mdd7gjco06.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "159656243067-3ghbfi1oanoq72loof982el2d36vcu91.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.hasimozudogru.ortakhesap"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159656243067:android:f5f3d69175667b55e9d7de",
+        "android_client_info": {
+          "package_name": "com.example.ortak_hesap"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "159656243067-g8mbod35glvo8v3mjbgts7mdd7gjco06.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDh9NhuOMZyVMXsLdLmRy7BAUfP304ZpCU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "159656243067-g8mbod35glvo8v3mjbgts7mdd7gjco06.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "159656243067-3ghbfi1oanoq72loof982el2d36vcu91.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.hasimozudogru.ortakhesap"
+              }
+            }
+          ]
         }
       }
     },
@@ -31,7 +84,12 @@
           "package_name": "com.hasimozudogru.ortak_hesap"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "159656243067-g8mbod35glvo8v3mjbgts7mdd7gjco06.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDh9NhuOMZyVMXsLdLmRy7BAUfP304ZpCU"
@@ -39,7 +97,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "159656243067-g8mbod35glvo8v3mjbgts7mdd7gjco06.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "159656243067-3ghbfi1oanoq72loof982el2d36vcu91.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.hasimozudogru.ortakhesap"
+              }
+            }
+          ]
         }
       }
     },
@@ -50,7 +120,36 @@
           "package_name": "com.hasimozudogru.ortakhesap"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "159656243067-1okhrlq9bka0f6cmtll4cql15nh3b6ms.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.hasimozudogru.ortakhesap",
+            "certificate_hash": "8d4a93b04b36a1de20c5b7ef99ba0159dd4593e1"
+          }
+        },
+        {
+          "client_id": "159656243067-agbu9ac8uu2ea7kf9eqlua7llgg18s5j.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.hasimozudogru.ortakhesap",
+            "certificate_hash": "45134dc2785b068a427d58169311ec5beb41ebb3"
+          }
+        },
+        {
+          "client_id": "159656243067-urt8ess87988bmjqnisuoi4qjnmor8h3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.hasimozudogru.ortakhesap",
+            "certificate_hash": "711b7b822e59db497b0cdcd272ffc06e7d6e1602"
+          }
+        },
+        {
+          "client_id": "159656243067-g8mbod35glvo8v3mjbgts7mdd7gjco06.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDh9NhuOMZyVMXsLdLmRy7BAUfP304ZpCU"
@@ -58,7 +157,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "159656243067-g8mbod35glvo8v3mjbgts7mdd7gjco06.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "159656243067-3ghbfi1oanoq72loof982el2d36vcu91.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.hasimozudogru.ortakhesap"
+              }
+            }
+          ]
         }
       }
     }

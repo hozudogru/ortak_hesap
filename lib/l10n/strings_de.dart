@@ -286,4 +286,15 @@ const Map<String, String> stringsDe = {
   'profile_saved': 'Profil aktualisiert.',
   'profile_reset_password': 'E-Mail zum Zurücksetzen des Passworts senden',
   'profile_reset_password_sent': 'E-Mail zum Zurücksetzen des Passworts gesendet.',
+
+  'social_or': 'oder',
+  'social_google': 'Mit Google fortfahren',
+  'social_apple': 'Mit Apple fortfahren',
+  'social_failed': 'Anmeldung fehlgeschlagen: {error}',
+  'delete_account_reauth_prompt':
+      'Aus Sicherheitsgründen müssen Sie sich erneut mit {provider} anmelden.',
+  'delete_account_reauth_button': 'Weiter',
+  'name_required_title': 'Namen eingeben',
+  'name_required_body':
+      'Ein Name ist nötig, damit Ihre Gruppenmitglieder Sie erkennen können.',
 };

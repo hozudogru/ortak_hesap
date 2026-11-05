@@ -281,4 +281,15 @@ const Map<String, String> stringsEn = {
   'profile_saved': 'Profile updated.',
   'profile_reset_password': 'Send password reset email',
   'profile_reset_password_sent': 'Password reset email sent.',
+
+  'social_or': 'or',
+  'social_google': 'Continue with Google',
+  'social_apple': 'Continue with Apple',
+  'social_failed': 'Sign-in failed: {error}',
+  'delete_account_reauth_prompt':
+      'For security you will be asked to sign in again with {provider}.',
+  'delete_account_reauth_button': 'Continue',
+  'name_required_title': 'Enter your name',
+  'name_required_body':
+      'A name is required so your group members can recognise you.',
 };

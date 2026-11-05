@@ -281,4 +281,15 @@ const Map<String, String> stringsTr = {
   'profile_saved': 'Profil güncellendi.',
   'profile_reset_password': 'Şifre sıfırlama e-postası gönder',
   'profile_reset_password_sent': 'Şifre sıfırlama e-postası gönderildi.',
+
+  'social_or': 'veya',
+  'social_google': 'Google ile devam et',
+  'social_apple': 'Apple ile devam et',
+  'social_failed': 'Giriş yapılamadı: {error}',
+  'delete_account_reauth_prompt':
+      'Güvenlik için {provider} ile tekrar giriş yapmanız istenecek.',
+  'delete_account_reauth_button': 'Devam et',
+  'name_required_title': 'Adınızı girin',
+  'name_required_body':
+      'Grup arkadaşlarınızın sizi tanıyabilmesi için bir ad gerekiyor.',
 };

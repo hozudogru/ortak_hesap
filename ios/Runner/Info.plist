@@ -69,6 +69,18 @@
 	<key>NSCameraUsageDescription</key>
 		<string>Bu uygulama grup katılım QR kodunu okutmak için kamerayı kullanır.</string>
 
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.159656243067-3ghbfi1oanoq72loof982el2d36vcu91</string>
+			</array>
+		</dict>
+	</array>
+
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 
