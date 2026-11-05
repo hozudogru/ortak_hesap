@@ -57,6 +57,9 @@ workflows:
 
   android-workflow:
     name: "Android Build"
+    # Linux makinesi: Mac mini kuyrugundan bagimsiz, hemen baslar.
+    instance_type: linux_x2
+    max_build_duration: 60
 
     environment:
       flutter: 3.47.9
